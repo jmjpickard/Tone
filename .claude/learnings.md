@@ -100,3 +100,43 @@
   - `scripts/setup.sh` functional checks:
     - runs `npm install`, validates env vars, skips init when vault already initialized
     - rejects non-initialized existing `VAULT_PATH` with explicit error
+- EPIC-2 in progress:
+  - Backlog now defines transcription as pluggable provider architecture (Deepgram + Voxtral), selected by `TRANSCRIPTION_PROVIDER`
+  - Added env/config surface for transcription provider selection (`TRANSCRIPTION_PROVIDER`, `VOXTRAL_ENDPOINT`, `VOXTRAL_API_KEY`, model names)
+  - Added dependency plan for EPIC-2 services:
+    - `telegraf` for bot wiring and callback reactions
+    - `yaml` for vault frontmatter parsing
+  - Implemented initial service files:
+    - `src/llm.ts` with tiered OpenRouter routing, headers, usage parsing, typed errors, retry/backoff, and stream variant
+    - `src/transcriber.ts` with `TranscriptionProvider` interface, Deepgram provider, Voxtral provider, and `createTranscriber()` factory
+    - `src/vault.ts` with path-safety checks, CRUD, full-text search, frontmatter parsing, and wiki-link resolution
+    - `src/utils/telegram.ts` with `formatBriefing`, `formatTaskList`, `sendWithReactions`, and `downloadVoice`
+    - `src/index.ts` now wires Telegraf handlers for `/start`, text, voice, callbacks, and centralized error handling
+- EPIC-2 implementation details confirmed:
+  - LLM client (`src/llm.ts`):
+    - exports `complete`, `chat`, and `streamChat`
+    - sends OpenRouter-required headers (`HTTP-Referer`, `X-Title`)
+    - includes exponential backoff for retryable statuses (`429`, `503`, `504`)
+    - normalizes token usage from API responses and returns it with completions
+    - returns typed error objects (`network_error`, `rate_limited`, `api_error`, `invalid_response`)
+  - Transcription service (`src/transcriber.ts`):
+    - `TranscriptionProvider` interface and `createTranscriber()` factory implemented
+    - provider-select via `TRANSCRIPTION_PROVIDER` (`deepgram` default, `voxtral` optional)
+    - `TranscriptionResult` shape: `text`, `confidence`, `provider`, `durationMs`
+    - Deepgram and Voxtral providers both handle empty audio with non-error empty result
+  - Vault service (`src/vault.ts`):
+    - exports `readNote`, `writeNote`, `appendNote`, `listNotes`, `searchNotes`, `resolveWikiLink`
+    - enforces vault-root path boundary to prevent traversal
+    - parses/writes YAML frontmatter in markdown notes
+  - Telegram utilities and bot wiring:
+    - reactions encoded as callback payloads (`feedback:up/down:<interactionId>`)
+    - callback handler emits typed `FeedbackEvent` objects (currently logged)
+    - `/start`, text, voice handlers and centralized bot error trap added
+- EPIC-2 validation:
+  - Added runtime deps: `telegraf`, `yaml`
+  - `npm run typecheck` passes after strictness fixes (`exactOptionalPropertyTypes`)
+  - `npm run build` passes
+  - `scripts/setup.sh` provider-mode smoke tests pass:
+    - `TRANSCRIPTION_PROVIDER=voxtral` works with `VOXTRAL_ENDPOINT` and without `DEEPGRAM_API_KEY`
+    - `TRANSCRIPTION_PROVIDER=deepgram` works with `DEEPGRAM_API_KEY`
+  - Post-smoke normalization re-run completed: `npm install`, `npm run typecheck`, `npm run build` all pass

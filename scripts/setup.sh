@@ -36,7 +36,6 @@ require_cmd cp
 required_vars=(
   TELEGRAM_BOT_TOKEN
   OPENROUTER_API_KEY
-  DEEPGRAM_API_KEY
   VAULT_PATH
   TONE_TIMEZONE
 )
@@ -47,6 +46,24 @@ for var_name in "${required_vars[@]}"; do
     missing_vars+=("$var_name")
   fi
 done
+
+transcription_provider="${TRANSCRIPTION_PROVIDER:-deepgram}"
+case "$transcription_provider" in
+  deepgram)
+    if [[ -z "${DEEPGRAM_API_KEY:-}" ]]; then
+      missing_vars+=("DEEPGRAM_API_KEY")
+    fi
+    ;;
+  voxtral)
+    if [[ -z "${VOXTRAL_ENDPOINT:-}" ]]; then
+      missing_vars+=("VOXTRAL_ENDPOINT")
+    fi
+    ;;
+  *)
+    error "Invalid TRANSCRIPTION_PROVIDER: $transcription_provider (expected 'deepgram' or 'voxtral')"
+    exit 1
+    ;;
+esac
 
 if (( ${#missing_vars[@]} > 0 )); then
   error "Missing required environment variables: ${missing_vars[*]}"

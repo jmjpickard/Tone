@@ -4,11 +4,15 @@ import type { LLMTier, VaultConfig } from './types.js';
 
 loadDotEnv();
 
+type TranscriptionProviderKind = 'deepgram' | 'voxtral';
+
 interface AppConfig {
   telegramBotToken: string;
   openRouterApiKey: string;
-  deepgramApiKey: string;
   timezone: string;
+  routing: {
+    confidenceThreshold: number;
+  };
   vault: VaultConfig;
   openRouter: {
     baseUrl: string;
@@ -20,12 +24,29 @@ interface AppConfig {
     tier2: LLMTier;
     tier3: LLMTier;
   };
+  transcription: {
+    provider: TranscriptionProviderKind;
+    deepgramModel: string;
+    voxtralModel: string;
+    deepgramApiKey?: string;
+    voxtralEndpoint?: string;
+    voxtralApiKey?: string;
+  };
 }
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value || value.trim() === '') {
     throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  return value.trim();
+}
+
+function optionalEnv(name: string): string | undefined {
+  const value = process.env[name];
+  if (!value || value.trim() === '') {
+    return undefined;
   }
 
   return value.trim();
@@ -51,6 +72,32 @@ function validateVaultPath(rawPath: string): string {
   return path.resolve(trimmed);
 }
 
+function validateTranscriptionProvider(rawProvider: string | undefined): TranscriptionProviderKind {
+  const normalized = (rawProvider ?? 'deepgram').trim().toLowerCase();
+  if (normalized === 'deepgram' || normalized === 'voxtral') {
+    return normalized;
+  }
+
+  throw new Error(
+    `Invalid TRANSCRIPTION_PROVIDER: \"${normalized}\". Expected \"deepgram\" or \"voxtral\".`,
+  );
+}
+
+function parseConfidenceThreshold(rawValue: string | undefined): number {
+  if (rawValue === undefined || rawValue.trim() === '') {
+    return 0.7;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new Error(
+      `Invalid ROUTER_CONFIDENCE_THRESHOLD: \"${rawValue}\". Expected a number between 0 and 1.`,
+    );
+  }
+
+  return parsed;
+}
+
 function buildVaultConfig(rootPath: string): VaultConfig {
   return {
     rootPath,
@@ -66,19 +113,49 @@ function buildVaultConfig(rootPath: string): VaultConfig {
   };
 }
 
+function buildTranscriptionConfig(provider: TranscriptionProviderKind): AppConfig['transcription'] {
+  const deepgramModel = optionalEnv('DEEPGRAM_MODEL') ?? 'nova-2';
+  const voxtralModel = optionalEnv('VOXTRAL_MODEL') ?? 'mistral-voxtral-mini-latest';
+
+  if (provider === 'deepgram') {
+    const deepgramApiKey = requiredEnv('DEEPGRAM_API_KEY');
+    return {
+      provider,
+      deepgramModel,
+      voxtralModel,
+      deepgramApiKey,
+    };
+  }
+
+  const voxtralEndpoint = requiredEnv('VOXTRAL_ENDPOINT');
+  const voxtralApiKey = optionalEnv('VOXTRAL_API_KEY');
+
+  return {
+    provider,
+    deepgramModel,
+    voxtralModel,
+    voxtralEndpoint,
+    ...(voxtralApiKey ? { voxtralApiKey } : {}),
+  };
+}
+
 const timezone = validateTimezone(requiredEnv('TONE_TIMEZONE'));
 const vaultRoot = validateVaultPath(requiredEnv('VAULT_PATH'));
+const transcriptionProvider = validateTranscriptionProvider(process.env.TRANSCRIPTION_PROVIDER);
+const routerConfidenceThreshold = parseConfidenceThreshold(process.env.ROUTER_CONFIDENCE_THRESHOLD);
 
 export const config: AppConfig = {
   telegramBotToken: requiredEnv('TELEGRAM_BOT_TOKEN'),
   openRouterApiKey: requiredEnv('OPENROUTER_API_KEY'),
-  deepgramApiKey: requiredEnv('DEEPGRAM_API_KEY'),
   timezone,
+  routing: {
+    confidenceThreshold: routerConfidenceThreshold,
+  },
   vault: buildVaultConfig(vaultRoot),
   openRouter: {
-    baseUrl: process.env.OPENROUTER_BASE_URL?.trim() || 'https://openrouter.ai/api/v1',
-    httpReferer: process.env.OPENROUTER_HTTP_REFERER?.trim() || 'https://github.com/tone',
-    xTitle: process.env.OPENROUTER_X_TITLE?.trim() || 'Tone',
+    baseUrl: optionalEnv('OPENROUTER_BASE_URL') ?? 'https://openrouter.ai/api/v1',
+    httpReferer: optionalEnv('OPENROUTER_HTTP_REFERER') ?? 'https://github.com/tone',
+    xTitle: optionalEnv('OPENROUTER_X_TITLE') ?? 'Tone',
   },
   llmTiers: {
     tier1: {
@@ -89,17 +166,18 @@ export const config: AppConfig = {
     },
     tier2: {
       id: 'tier2',
-      model: 'claude-sonnet-4-5',
+      model: 'minimax/minimax-m2.5',
       temperature: 0.4,
       maxTokens: 2400,
     },
     tier3: {
       id: 'tier3',
-      model: 'claude-opus-4',
+      model: 'google/gemini-3.1-pro-preview',
       temperature: 0.3,
       maxTokens: 3200,
     },
   },
+  transcription: buildTranscriptionConfig(transcriptionProvider),
 };
 
-export type { AppConfig };
+export type { AppConfig, TranscriptionProviderKind };
