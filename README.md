@@ -130,6 +130,14 @@ If `tone onboard` fails with `Permission denied`, reinstall with:
 curl -fsSL https://raw.githubusercontent.com/jmjpickard/Tone/main/scripts/install.sh | bash
 ```
 
+To fully remove Tone from a machine, run:
+
+```bash
+tone uninstall
+```
+
+`tone uninstall` asks for confirmation, then deletes Tone home (`~/.tone` by default), removes the global npm `tone` package, removes the global `tone` executable, and attempts to stop/disable `tone.service`.
+
 ## Operational Smoke Checks
 
 After startup in Telegram, test:

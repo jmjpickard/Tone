@@ -16,6 +16,12 @@ async function run(): Promise<void> {
       return;
     }
 
+    if (command === 'uninstall') {
+      const { uninstall } = await import('./uninstall.js');
+      await uninstall();
+      return;
+    }
+
     if (command === 'help' || command === '--help' || command === '-h') {
       console.log(
         [
@@ -24,6 +30,7 @@ async function run(): Promise<void> {
           'Usage:',
           '  tone start      Start the Tone bot',
           '  tone onboard    Configure Tone and initialize the vault',
+          '  tone uninstall  Remove Tone from this machine',
           '  tone help       Show this help message',
         ].join('\n'),
       );
