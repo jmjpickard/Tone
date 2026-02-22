@@ -88,6 +88,17 @@ npm run build
 ./scripts/service.sh status
 ```
 
+## Startup Troubleshooting
+
+If the app fails during startup with a missing environment variable error, update `.env` with the required keys and restart:
+
+- `OPENROUTER_API_KEY` (OpenRouter key)
+- `TELEGRAM_BOT_TOKEN` (Telegram bot token)
+- `DEEPGRAM_API_KEY` (when `TRANSCRIPTION_PROVIDER=deepgram`)
+- `VOXTRAL_ENDPOINT` (when `TRANSCRIPTION_PROVIDER=voxtral`)
+
+Also set `TELEGRAM_DEFAULT_CHAT_ID` if you want scheduled briefings/nightly/weekly messages to be delivered automatically.
+
 ## Operational Smoke Checks
 
 After startup in Telegram, test:
