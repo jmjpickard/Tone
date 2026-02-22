@@ -1,0 +1,501 @@
+{
+  "project": "tone",
+  "version": "0.1.0-0.2.0",
+  "description": "Adaptive personal AI agent — Telegram interface, Obsidian vault, OpenRouter LLM, pluggable transcription (Deepgram default, Voxtral self-hosted future). Build plan covering foundation through evolutionary feedback loops.",
+  "epics": [
+    {
+      "id": "EPIC-1",
+      "title": "Project Foundation",
+      "description": "Initialize the TypeScript project, vault template, setup scripts, and shared types. Everything downstream depends on this foundation being solid.",
+      "tickets": [
+        {
+          "id": "TONE-001",
+          "epicId": "EPIC-1",
+          "title": "Initialize TypeScript project with tooling",
+          "description": "Set up the public repo structure with TypeScript, strict mode, and essential tooling. This is the first thing built — everything else depends on it.",
+          "acceptanceCriteria": [
+            "package.json with name 'tone', scripts for build, dev, start, and typecheck",
+            "tsconfig.json with strict mode, ES2022 target, NodeNext module resolution, outDir 'dist'",
+            ".env.example with all required env vars: TELEGRAM_BOT_TOKEN, OPENROUTER_API_KEY, DEEPGRAM_API_KEY, VAULT_PATH, TONE_TIMEZONE, TRANSCRIPTION_PROVIDER (deepgram|voxtral, default deepgram)",
+            ".gitignore covers node_modules/, .env, vault/, dist/, *.log",
+            "Dev dependencies installed: typescript, tsx, @types/node",
+            "Project compiles with zero errors on empty src/index.ts"
+          ],
+          "files": [
+            "package.json",
+            "tsconfig.json",
+            ".env.example",
+            ".gitignore"
+          ],
+          "dependencies": [],
+          "estimateHours": 1,
+          "tags": ["foundation", "tooling"]
+        },
+        {
+          "id": "TONE-002",
+          "epicId": "EPIC-1",
+          "title": "Create vault template with full directory structure",
+          "description": "Build the vault-template directory that ships with the public repo. This is the 'base genome' — the starting point for every Tone instance. Includes seed skill definitions (markdown), config files, and feedback directory structure.",
+          "acceptanceCriteria": [
+            "vault-template/ contains all directories: _inbox, threads, tasks, projects, people, daily, skills, config, feedback",
+            "feedback/ has subdirectories: interactions, daily, weekly",
+            "feedback/ has seed files: corrections.md, autonomic.md, patterns.md, evolution.md — each with header and empty structure",
+            "tasks/ has seed files: active.md, completed.md, someday.md",
+            "skills/ has 6 seed skill definitions: capture.md, task.md, draft.md, briefing.md, reflect.md (IMMUTABLE), adapt.md (IMMUTABLE)",
+            "Each skill markdown defines: trigger patterns, input/output format, examples, and constraints",
+            "config/ has 4 files: about-user.md (template), personality.md (neutral start), reward-signals.md, boundaries.md",
+            "boundaries.md clearly lists immutable vs evolvable vs autonomic categories"
+          ],
+          "files": [
+            "vault-template/_inbox/.gitkeep",
+            "vault-template/threads/.gitkeep",
+            "vault-template/tasks/active.md",
+            "vault-template/tasks/completed.md",
+            "vault-template/tasks/someday.md",
+            "vault-template/projects/.gitkeep",
+            "vault-template/people/.gitkeep",
+            "vault-template/daily/.gitkeep",
+            "vault-template/skills/capture.md",
+            "vault-template/skills/task.md",
+            "vault-template/skills/draft.md",
+            "vault-template/skills/briefing.md",
+            "vault-template/skills/reflect.md",
+            "vault-template/skills/adapt.md",
+            "vault-template/config/about-user.md",
+            "vault-template/config/personality.md",
+            "vault-template/config/reward-signals.md",
+            "vault-template/config/boundaries.md",
+            "vault-template/feedback/corrections.md",
+            "vault-template/feedback/autonomic.md",
+            "vault-template/feedback/patterns.md",
+            "vault-template/feedback/evolution.md",
+            "vault-template/feedback/interactions/.gitkeep",
+            "vault-template/feedback/daily/.gitkeep",
+            "vault-template/feedback/weekly/.gitkeep"
+          ],
+          "dependencies": [],
+          "estimateHours": 1.5,
+          "tags": ["foundation", "vault"]
+        },
+        {
+          "id": "TONE-003",
+          "epicId": "EPIC-1",
+          "title": "Build setup and vault init scripts",
+          "description": "Create shell scripts for first-run setup, vault initialization, and systemd service management. These scripts make Tone easy to deploy on a fresh Raspberry Pi.",
+          "acceptanceCriteria": [
+            "scripts/setup.sh installs Node.js deps, checks for required env vars, runs init-vault if vault doesn't exist",
+            "scripts/init-vault.sh copies vault-template to VAULT_PATH, initializes private git repo, creates initial commit tagged 'base-v0.1.0'",
+            "scripts/service.sh can install/start/stop/restart Tone as a systemd service",
+            "All scripts are idempotent — safe to run multiple times",
+            "Scripts check for prerequisites and give clear error messages",
+            "init-vault.sh refuses to overwrite an existing vault (safety check)"
+          ],
+          "files": [
+            "scripts/setup.sh",
+            "scripts/init-vault.sh",
+            "scripts/service.sh"
+          ],
+          "dependencies": ["TONE-001", "TONE-002"],
+          "estimateHours": 1.5,
+          "tags": ["foundation", "devops"]
+        },
+        {
+          "id": "TONE-004",
+          "epicId": "EPIC-1",
+          "title": "Define shared types and config module",
+          "description": "Create the type definitions and config module that all other source files depend on. Types should precisely model the domain: interactions, skills, feedback events, vault structure. Config module loads and validates env vars.",
+          "acceptanceCriteria": [
+            "src/types.ts exports interfaces: Interaction, SkillDefinition, FeedbackEvent, VaultConfig, LLMTier, RouterResult",
+            "Interaction type includes: id, timestamp, userId, input (text/voice), intent, skillUsed, response, feedbackSignal",
+            "SkillDefinition models the markdown skill format: name, triggers, inputSchema, outputSchema, constraints, immutable flag",
+            "FeedbackEvent covers: corrections, thumbs up/down, implicit signals (engagement timing, draft acceptance)",
+            "src/config.ts loads .env, validates all required vars exist, exports typed config object",
+            "Config module throws clear errors for missing or invalid env vars",
+            "typecheck passes with no errors"
+          ],
+          "files": [
+            "src/types.ts",
+            "src/config.ts"
+          ],
+          "dependencies": ["TONE-001"],
+          "estimateHours": 1.5,
+          "tags": ["foundation", "types"]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-2",
+      "title": "Core Services",
+      "description": "Build the four foundational services: LLM client with tiered routing, voice transcription, vault CRUD operations, and Telegram bot setup. These are independent services that the interaction pipeline composes.",
+      "tickets": [
+        {
+          "id": "TONE-005",
+          "epicId": "EPIC-2",
+          "title": "LLM client with tiered routing via OpenRouter",
+          "description": "Build the OpenRouter LLM client with three-tier model routing. Tier 1 (Gemini Flash) for cheap tasks like intent routing and filing. Tier 2 (Claude Sonnet) for user-facing interactions. Tier 3 (Claude Opus) for self-improvement and code generation.",
+          "acceptanceCriteria": [
+            "src/llm.ts exports functions: complete(prompt, tier), chat(messages, tier), and a streaming variant",
+            "Three tiers configured: tier1 (gemini-2.0-flash), tier2 (claude-sonnet-4-5), tier3 (claude-opus-4)",
+            "Each request includes proper OpenRouter headers (HTTP-Referer, X-Title)",
+            "Handles rate limiting with exponential backoff",
+            "Handles API errors gracefully with typed error responses",
+            "Token usage tracked and returned with each response",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/llm.ts"
+          ],
+          "dependencies": ["TONE-004"],
+          "estimateHours": 2,
+          "tags": ["core", "llm"]
+        },
+        {
+          "id": "TONE-006",
+          "epicId": "EPIC-2",
+          "title": "Pluggable voice transcription service (Deepgram + Voxtral)",
+          "description": "Build a pluggable voice transcription service behind a TranscriptionProvider interface. Ship two implementations: Deepgram (cloud API, default for Pi 4) and Voxtral Mini (self-hosted via Mistral, for Beelink/GPU hardware). Provider selected via TRANSCRIPTION_PROVIDER env var. Handles Telegram's OGG/Opus audio format.",
+          "acceptanceCriteria": [
+            "src/transcriber.ts exports TranscriptionProvider interface with transcribe(audioBuffer, mimeType) => TranscriptionResult",
+            "TranscriptionResult includes: text, confidence, provider, durationMs",
+            "src/transcriber.ts exports createTranscriber(provider) factory that returns the configured provider",
+            "Deepgram provider: calls Deepgram API, handles OGG/Opus, returns confidence score",
+            "Voxtral provider: calls local/remote Voxtral Mini endpoint (OpenAI-compatible API), handles OGG/Opus",
+            "TRANSCRIPTION_PROVIDER env var selects provider ('deepgram' default, 'voxtral' for self-hosted)",
+            "VOXTRAL_ENDPOINT env var configures Voxtral URL (e.g. http://localhost:8000/v1) when provider is voxtral",
+            "Handles API errors gracefully for both providers",
+            "Handles empty/silent audio gracefully (returns empty string, not error)",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/transcriber.ts"
+          ],
+          "dependencies": ["TONE-004"],
+          "estimateHours": 2,
+          "tags": ["core", "voice", "transcription"]
+        },
+        {
+          "id": "TONE-007",
+          "epicId": "EPIC-2",
+          "title": "Obsidian vault CRUD service",
+          "description": "Build the vault service for reading, writing, and querying markdown files in the Obsidian vault. Supports wiki-link resolution, frontmatter parsing, and directory listing. This is how Tone reads and writes its own knowledge.",
+          "acceptanceCriteria": [
+            "src/vault.ts exports: readNote, writeNote, appendNote, listNotes, searchNotes, resolveWikiLink",
+            "readNote parses frontmatter (YAML) and returns structured { frontmatter, content } object",
+            "writeNote creates/overwrites markdown files with optional frontmatter",
+            "appendNote adds content to existing file (for logs, daily notes)",
+            "listNotes returns files in a directory with metadata (modified date, size)",
+            "searchNotes does full-text search across vault files",
+            "resolveWikiLink converts [[note-name]] to file path, handling ambiguity",
+            "All paths validated to stay within vault root (no path traversal)",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/vault.ts"
+          ],
+          "dependencies": ["TONE-004"],
+          "estimateHours": 2,
+          "tags": ["core", "vault"]
+        },
+        {
+          "id": "TONE-008",
+          "epicId": "EPIC-2",
+          "title": "Telegram bot setup and utilities",
+          "description": "Set up the Telegram bot with Telegraf, handle text and voice messages, wire reaction callbacks (thumbs up/down as feedback signals), and build formatting utilities for structured responses.",
+          "acceptanceCriteria": [
+            "src/index.ts creates Telegraf bot, registers handlers for text, voice, and callback queries",
+            "src/utils/telegram.ts exports: formatBriefing, formatTaskList, sendWithReactions, downloadVoice",
+            "downloadVoice fetches voice message file from Telegram API and returns Buffer",
+            "sendWithReactions attaches inline keyboard with thumbs up/down buttons",
+            "Reaction callbacks emit typed FeedbackEvent objects",
+            "Bot handles errors gracefully (logs error, sends user-friendly message)",
+            "Bot responds to /start with a welcome message",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/index.ts",
+            "src/utils/telegram.ts"
+          ],
+          "dependencies": ["TONE-004"],
+          "estimateHours": 2,
+          "tags": ["core", "telegram"]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-3",
+      "title": "Interaction Pipeline",
+      "description": "Build the full message-handling pipeline: intent routing, skill loading and execution, and feedback logging. TONE-012 is the integration ticket that wires everything end-to-end.",
+      "tickets": [
+        {
+          "id": "TONE-009",
+          "epicId": "EPIC-3",
+          "title": "Intent router with confidence scoring",
+          "description": "Build the intent router that classifies incoming messages into skill intents (capture, task, draft, chat) with confidence scores. Uses Tier 1 LLM for fast, cheap classification. Falls back to chat skill when confidence is below threshold.",
+          "acceptanceCriteria": [
+            "src/router.ts exports route(message) returning RouterResult with { intent, confidence, extractedEntities }",
+            "Uses Tier 1 LLM (Gemini Flash) for classification — fast and cheap",
+            "Recognizes intents: capture, task, draft, chat, rollback, introspection",
+            "Confidence threshold configurable (default 0.7) — below threshold falls back to chat",
+            "Extracts entities from message (task description, draft recipient, capture topic)",
+            "Prompt includes loaded skill definitions for context (skill triggers from vault)",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/router.ts"
+          ],
+          "dependencies": ["TONE-005", "TONE-010"],
+          "estimateHours": 2,
+          "tags": ["pipeline", "routing"]
+        },
+        {
+          "id": "TONE-010",
+          "epicId": "EPIC-3",
+          "title": "Skill loader and capture skill implementation",
+          "description": "Build the skill loader that reads skill definitions from vault markdown files and provides them to the router and skill executor. Implement the capture skill as the first concrete skill — it files thoughts, voice notes, and quick ideas into the appropriate vault location.",
+          "acceptanceCriteria": [
+            "src/skills/types.ts defines SkillHandler interface: { name, execute(input, context) => SkillResult }",
+            "src/skills/loader.ts reads skill markdown from vault/skills/, parses into SkillDefinition objects",
+            "Loader caches parsed skills, invalidates cache when vault files change",
+            "Loader returns skill metadata (triggers, constraints) for the router to use",
+            "src/skills/capture.ts implements capture skill: classifies thought topic, selects target file, appends to vault",
+            "Capture skill uses Tier 1 LLM to determine filing location (which thread or _inbox)",
+            "Capture skill supports both text and transcribed voice input",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/skills/types.ts",
+            "src/skills/loader.ts",
+            "src/skills/capture.ts"
+          ],
+          "dependencies": ["TONE-005", "TONE-007"],
+          "estimateHours": 2.5,
+          "tags": ["pipeline", "skills"]
+        },
+        {
+          "id": "TONE-011",
+          "epicId": "EPIC-3",
+          "title": "Task, draft, and chat skill implementations",
+          "description": "Implement the three remaining seed skills. Task skill manages a simple task system in the vault. Draft skill generates message drafts for contacts. Chat skill is the general-purpose conversational fallback.",
+          "acceptanceCriteria": [
+            "src/skills/task.ts handles: add task, complete task, list tasks, move to someday",
+            "Task skill reads/writes tasks/active.md, tasks/completed.md, tasks/someday.md",
+            "src/skills/draft.ts generates message drafts using Tier 2 LLM with context from people/ notes",
+            "Draft skill looks up recipient in people/ directory for context and communication style",
+            "src/skills/chat.ts handles general conversation using Tier 2 LLM with vault context",
+            "Chat skill loads personality.md and recent conversation context for consistent responses",
+            "All skills return structured SkillResult matching the types.ts interface",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/skills/task.ts",
+            "src/skills/draft.ts",
+            "src/skills/chat.ts"
+          ],
+          "dependencies": ["TONE-010"],
+          "estimateHours": 3,
+          "tags": ["pipeline", "skills"]
+        },
+        {
+          "id": "TONE-012",
+          "epicId": "EPIC-3",
+          "title": "Feedback logger and wire full interaction pipeline",
+          "description": "Build the feedback logger that records every interaction as JSONL, tracks outcome signals, and logs corrections. Then wire the complete pipeline in index.ts: message → transcribe (if voice) → route → execute skill → respond → log interaction → attach feedback buttons.",
+          "acceptanceCriteria": [
+            "src/feedback.ts exports: logInteraction, logCorrection, logFeedbackSignal",
+            "logInteraction appends JSONL to vault/feedback/interactions/YYYY-MM-DD.jsonl",
+            "Each interaction log entry matches the Interaction type from types.ts",
+            "logCorrection appends to vault/feedback/corrections.md with timestamp and context",
+            "logFeedbackSignal records thumbs up/down against the interaction ID",
+            "src/index.ts wires the full pipeline: voice → transcribe → route → skill → respond → log",
+            "Telegram reaction callbacks (thumbs up/down) call logFeedbackSignal",
+            "Error handling at each pipeline stage — failures don't crash the bot",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/feedback.ts",
+            "src/index.ts"
+          ],
+          "dependencies": ["TONE-006", "TONE-008", "TONE-009", "TONE-011"],
+          "estimateHours": 2.5,
+          "tags": ["pipeline", "integration"]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-4",
+      "title": "Proactive Loops",
+      "description": "Build the three feedback loops that make Tone self-improving: morning briefing, nightly circadian review (Loop 2), and weekly adaptation (Loop 3). Also includes the evolution module for vault git operations, which all loops depend on.",
+      "tickets": [
+        {
+          "id": "TONE-013",
+          "epicId": "EPIC-4",
+          "title": "Morning briefing loop",
+          "description": "Build the morning briefing that runs on a cron schedule. Aggregates active tasks, recent thread activity, and upcoming events into a formatted Telegram message. Briefing format and timing are autonomic — Tone can adjust them based on engagement patterns.",
+          "acceptanceCriteria": [
+            "src/loops/briefing.ts exports a generateBriefing() function and a scheduleBriefing() cron setup",
+            "Briefing reads: tasks/active.md, recent daily/ notes, thread activity, config/personality.md",
+            "Uses Tier 2 LLM to synthesize briefing content in the personality's voice",
+            "Sends formatted briefing via Telegram using formatBriefing utility",
+            "Briefing includes sections: priorities, active threads, pending tasks",
+            "Cron schedule configurable via env var (default 07:30 local time)",
+            "Briefing engagement (read timing, response) tracked as implicit feedback",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/loops/briefing.ts"
+          ],
+          "dependencies": ["TONE-012"],
+          "estimateHours": 2,
+          "tags": ["loops", "briefing"]
+        },
+        {
+          "id": "TONE-014",
+          "epicId": "EPIC-4",
+          "title": "Nightly circadian review (Loop 2)",
+          "description": "Build the nightly review that runs at 23:00. Evaluates the day's interactions, tracks outcomes, updates patterns.md, makes autonomic adjustments (briefing timing, verbosity), and commits everything to the vault git repo.",
+          "acceptanceCriteria": [
+            "src/loops/nightly.ts exports generateNightlyReview() and scheduleNightly() cron setup",
+            "Reads all interaction JSONL logs for the current day",
+            "Aggregates: total interactions, positive/negative signals, skill usage distribution",
+            "Uses Tier 3 LLM to analyse patterns and generate daily reflection",
+            "Writes daily reflection to vault/feedback/daily/YYYY-MM-DD.md",
+            "Updates vault/feedback/patterns.md with newly observed patterns",
+            "Makes autonomic adjustments (briefing timing, verbosity) based on engagement data",
+            "Records autonomic adjustments in vault/feedback/autonomic.md",
+            "Commits all changes to vault git repo with 'nightly:' prefix commit message",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/loops/nightly.ts"
+          ],
+          "dependencies": ["TONE-012", "TONE-015"],
+          "estimateHours": 3,
+          "tags": ["loops", "feedback"]
+        },
+        {
+          "id": "TONE-015",
+          "epicId": "EPIC-4",
+          "title": "Evolution module (vault git operations)",
+          "description": "Build the evolution module that wraps git operations on the vault repo. This is the foundation for all feedback loops — every mutation Tone makes to itself becomes a git commit. Uses simple-git for programmatic git access.",
+          "acceptanceCriteria": [
+            "src/evolution.ts exports: commit, tag, createBranch, mergeBranch, diff, log, rollback, getCurrentTag",
+            "commit(message, type) creates a typed commit: 'correction', 'nightly', 'adapt'",
+            "tag(name) creates a named tag (e.g., 'week-08', 'snapshot/good-at-briefings')",
+            "createBranch(name) creates a branch for weekly adaptation proposals",
+            "mergeBranch(name) merges an adaptation branch back to main",
+            "diff(fromRef, toRef, paths?) returns structured diff information",
+            "rollback(ref, paths?) restores files from a previous state as a new commit",
+            "All operations work on the vault repo path (not the code repo)",
+            "simple-git added as dependency",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/evolution.ts"
+          ],
+          "dependencies": ["TONE-004"],
+          "estimateHours": 2,
+          "tags": ["evolution", "git"]
+        },
+        {
+          "id": "TONE-016",
+          "epicId": "EPIC-4",
+          "title": "Weekly adaptation loop (Loop 3) with approval flow",
+          "description": "Build the weekly Friday review that analyses the entire week's data, proposes behavioural changes on a git branch, sends a summary via Telegram, and waits for user approval. Approved changes merge to main. Rejected changes are logged with reasoning.",
+          "acceptanceCriteria": [
+            "src/loops/weekly.ts exports generateWeeklyReview() and scheduleWeekly() cron setup",
+            "Reads all daily reviews and interaction logs for the past 7 days",
+            "Uses Tier 3 LLM to identify trends, propose skill modifications, suggest personality tweaks",
+            "Creates a git branch (e.g., 'adapt/week-08') with proposed changes",
+            "Tags current main as 'week-NN' before branching (snapshot for rollback)",
+            "Writes detailed proposal to vault/feedback/weekly/YYYY-WNN.md",
+            "Sends formatted summary to Telegram with approve/reject inline buttons",
+            "On approve: merges branch to main, commits with 'adapt:' prefix",
+            "On reject: logs rejection reasoning, deletes branch, keeps data for next review",
+            "Cron runs Friday at 15:00 local time (configurable)",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/loops/weekly.ts"
+          ],
+          "dependencies": ["TONE-014", "TONE-015"],
+          "estimateHours": 3,
+          "tags": ["loops", "adaptation"]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-5",
+      "title": "Rollback & Introspection",
+      "description": "Complete the feedback loop system with Loop 1 (immediate corrections committed to git), rollback commands via Telegram, and the 'what's changed' introspection feature. These give the user full visibility and control over Tone's evolution.",
+      "tickets": [
+        {
+          "id": "TONE-017",
+          "epicId": "EPIC-5",
+          "title": "Loop 1 — immediate corrections with git commits",
+          "description": "Enhance the feedback logger to detect corrections (user fixing Tone's behaviour) and automatically commit them to the vault git repo. Each correction becomes a 'heartbeat commit' — small, frequent, immediately applied.",
+          "acceptanceCriteria": [
+            "src/feedback.ts enhanced: logCorrection now also commits to vault git via evolution module",
+            "Correction detection: identifies when user is correcting a previous response (explicit 'no, do X' or re-filing)",
+            "Each correction committed with 'correction:' prefix and descriptive message",
+            "Corrections update vault/feedback/corrections.md with the correction and learned heuristic",
+            "Correction context stored: what Tone did wrong, what the user wanted, the rule to learn",
+            "Corrections are available for nightly review (Loop 2) aggregation",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/feedback.ts"
+          ],
+          "dependencies": ["TONE-012", "TONE-015"],
+          "estimateHours": 2,
+          "tags": ["feedback", "corrections"]
+        },
+        {
+          "id": "TONE-018",
+          "epicId": "EPIC-5",
+          "title": "Rollback via Telegram and named snapshots",
+          "description": "Implement rollback commands accessible via natural language in Telegram. User can roll back to a named state, revert a specific skill, or create a named snapshot. All rollbacks are new commits (history is never rewritten).",
+          "acceptanceCriteria": [
+            "Router recognizes rollback intents: 'go back to week N', 'revert briefing', 'save this state as X'",
+            "src/evolution.ts rollback functions invoked from router for rollback intents",
+            "Full rollback: restores all skills/config from a tag or commit ref",
+            "Surgical rollback: restores specific files (e.g., just skills/briefing.md)",
+            "Before rollback: shows user what would change (diff in plain English via LLM)",
+            "User must confirm rollback via Telegram button before it's applied",
+            "Named snapshots: 'save state as X' creates tag 'snapshot/X'",
+            "Pre-rollback state tagged automatically (e.g., 'pre-rollback-TIMESTAMP') for safety",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/evolution.ts",
+            "src/router.ts"
+          ],
+          "dependencies": ["TONE-012", "TONE-015"],
+          "estimateHours": 2.5,
+          "tags": ["evolution", "rollback"]
+        },
+        {
+          "id": "TONE-019",
+          "epicId": "EPIC-5",
+          "title": "'What's changed' introspection and evolution log",
+          "description": "Implement the introspection feature: user asks 'what's changed about you since week N?' and gets a plain-English summary of Tone's evolution. Also build the evolution log writer that maintains the narrative account in feedback/evolution.md.",
+          "acceptanceCriteria": [
+            "Router recognizes introspection intents: 'what's changed since X', 'how have you evolved'",
+            "src/evolution.ts diff output piped through Tier 2 LLM to generate plain-English summary",
+            "Summary describes: what skills changed, personality shifts, autonomic adjustments, approval history",
+            "Evolution log writer appends weekly summaries to vault/feedback/evolution.md",
+            "Evolution log format matches the doc spec: state at start, changes, state at end, reward trend",
+            "Weekly loop (TONE-016) calls evolution log writer after each review cycle",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/evolution.ts",
+            "src/loops/weekly.ts"
+          ],
+          "dependencies": ["TONE-015", "TONE-016"],
+          "estimateHours": 2,
+          "tags": ["evolution", "introspection"]
+        }
+      ]
+    }
+  ]
+}
