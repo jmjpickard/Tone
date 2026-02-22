@@ -33,20 +33,22 @@ Keep personal data in the vault repo only.
 - Linux host (Raspberry Pi supported)
 - Telegram bot token
 - OpenRouter API key
-- Either Deepgram or Voxtral transcription provider
+- Optional for voice notes: Deepgram or Voxtral transcription provider
 
 ## Environment
 
-Copy `.env.example` to `.env` and set required values:
+Run `tone onboard` to generate your env file automatically. If you want to set values manually, copy `.env.example` and set:
 
 - Required:
   - `TELEGRAM_BOT_TOKEN`
-  - `TELEGRAM_DEFAULT_CHAT_ID` (needed for proactive loops to send messages)
   - `OPENROUTER_API_KEY`
   - `VAULT_PATH`
   - `TONE_TIMEZONE`
+- Recommended:
+  - `TELEGRAM_DEFAULT_CHAT_ID` (needed for proactive loops to send messages)
 - Transcription:
-  - `TRANSCRIPTION_PROVIDER=deepgram` and `DEEPGRAM_API_KEY`
+  - `TRANSCRIPTION_PROVIDER=none` (text-only mode)
+  - or `TRANSCRIPTION_PROVIDER=deepgram` and `DEEPGRAM_API_KEY`
   - or `TRANSCRIPTION_PROVIDER=voxtral` and `VOXTRAL_ENDPOINT`
 - Loop scheduling defaults:
   - `BRIEFING_CRON=30 7 * * *`
@@ -54,26 +56,27 @@ Copy `.env.example` to `.env` and set required values:
   - `WEEKLY_CRON=0 15 * * 5`
   - `DEFAULT_RESPONSE_VERBOSITY=balanced`
 
-## Quickstart (Install + Start)
+## Quickstart (Install + Onboard + Start)
 
-To make the `tone` command available globally, install Tone from this repository and then run `tone start`:
+Install and update the CLI with a single command:
 
 ```bash
-cd /path/to/tone
-npm install
-npm run build
-npm install --global .
+curl -fsSL https://raw.githubusercontent.com/jmjpickard/Tone/main/scripts/install.sh | bash
+```
+
+Then onboard once and start Tone:
+
+```bash
+tone onboard
 tone start
 ```
 
-If you update Tone later, rebuild and reinstall globally:
+`tone onboard` writes your config to `~/.tone/.env` (or `TONE_ENV_PATH` if set) and initializes the vault automatically.
+
+If you need to install from a fork or branch:
 
 ```bash
-cd /path/to/tone
-git pull
-npm install
-npm run build
-npm install --global .
+TONE_REPO_URL=https://github.com/<you>/<repo>.git TONE_BRANCH=<branch> curl -fsSL https://raw.githubusercontent.com/jmjpickard/Tone/main/scripts/install.sh | bash
 ```
 
 ## Raspberry Pi Deploy (Fresh)
@@ -112,7 +115,7 @@ npm run build
 
 ## Startup Troubleshooting
 
-If the app fails during startup with a missing environment variable error, update `.env` with the required keys and restart:
+If the app fails during startup with a missing environment variable error, update `~/.tone/.env` (or your `TONE_ENV_PATH`) and restart:
 
 - `OPENROUTER_API_KEY` (OpenRouter key)
 - `TELEGRAM_BOT_TOKEN` (Telegram bot token)
@@ -163,6 +166,8 @@ This gives you reproducible deployments and easier rollback (`git checkout <olde
 
 - `scripts/setup.sh`
   - Installs dependencies, validates env, initializes vault if needed
+- `scripts/install.sh`
+  - Clones/updates Tone, builds it, and installs the `tone` CLI globally
 - `scripts/init-vault.sh`
   - Creates vault from template and initializes vault git repo
 - `scripts/service.sh`

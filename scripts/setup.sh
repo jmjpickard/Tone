@@ -21,8 +21,12 @@ print_env_guidance() {
 [setup]   OPENROUTER_API_KEY=<openrouter api key>
 [setup]   VAULT_PATH=/absolute/path/to/your/vault
 [setup]   TONE_TIMEZONE=Europe/London
-[setup]   TRANSCRIPTION_PROVIDER=deepgram
-[setup]   DEEPGRAM_API_KEY=<deepgram api key>
+[setup]   TRANSCRIPTION_PROVIDER=none
+[setup]   # Optional voice notes:
+[setup]   # TRANSCRIPTION_PROVIDER=deepgram
+[setup]   # DEEPGRAM_API_KEY=<deepgram api key>
+[setup]   # or TRANSCRIPTION_PROVIDER=voxtral
+[setup]   # VOXTRAL_ENDPOINT=<voxtral endpoint url>
 [setup] Optional but recommended for proactive loops:
 [setup]   TELEGRAM_DEFAULT_CHAT_ID=<telegram chat id>
 GUIDE
@@ -62,8 +66,10 @@ for var_name in "${required_vars[@]}"; do
   fi
 done
 
-transcription_provider="${TRANSCRIPTION_PROVIDER:-deepgram}"
+transcription_provider="${TRANSCRIPTION_PROVIDER:-none}"
 case "$transcription_provider" in
+  none)
+    ;;
   deepgram)
     if [[ -z "${DEEPGRAM_API_KEY:-}" ]]; then
       missing_vars+=("DEEPGRAM_API_KEY")
@@ -75,7 +81,7 @@ case "$transcription_provider" in
     fi
     ;;
   *)
-    error "Invalid TRANSCRIPTION_PROVIDER: $transcription_provider (expected 'deepgram' or 'voxtral')"
+    error "Invalid TRANSCRIPTION_PROVIDER: $transcription_provider (expected 'none', 'deepgram', or 'voxtral')"
     exit 1
     ;;
 esac

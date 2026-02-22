@@ -1,10 +1,18 @@
 import { config as loadDotEnv } from 'dotenv';
+import fs from 'node:fs';
 import path from 'node:path';
+import { resolveToneEnvPath } from './paths.js';
 import type { LLMTier, VaultConfig } from './types.js';
 
-loadDotEnv();
+const toneEnvPath = resolveToneEnvPath();
+loadDotEnv({ path: toneEnvPath });
 
-type TranscriptionProviderKind = 'deepgram' | 'voxtral';
+const localEnvPath = path.resolve(process.cwd(), '.env');
+if (localEnvPath !== toneEnvPath && fs.existsSync(localEnvPath)) {
+  loadDotEnv({ path: localEnvPath, override: true });
+}
+
+type TranscriptionProviderKind = 'none' | 'deepgram' | 'voxtral';
 type ResponseVerbosity = 'concise' | 'balanced' | 'detailed';
 
 interface AppConfig {
@@ -59,8 +67,8 @@ function requiredEnv(name: string): string {
     const hint = setupHints[name];
     throw new Error(
       hint
-        ? `Missing required environment variable: ${name}. ${hint}`
-        : `Missing required environment variable: ${name}`,
+        ? `Missing required environment variable: ${name}. ${hint} Run "tone onboard" to configure Tone.`
+        : `Missing required environment variable: ${name}. Run "tone onboard" to configure Tone.`,
     );
   }
 
@@ -97,13 +105,13 @@ function validateVaultPath(rawPath: string): string {
 }
 
 function validateTranscriptionProvider(rawProvider: string | undefined): TranscriptionProviderKind {
-  const normalized = (rawProvider ?? 'deepgram').trim().toLowerCase();
-  if (normalized === 'deepgram' || normalized === 'voxtral') {
+  const normalized = (rawProvider ?? 'none').trim().toLowerCase();
+  if (normalized === 'none' || normalized === 'deepgram' || normalized === 'voxtral') {
     return normalized;
   }
 
   throw new Error(
-    `Invalid TRANSCRIPTION_PROVIDER: \"${normalized}\". Expected \"deepgram\" or \"voxtral\".`,
+    `Invalid TRANSCRIPTION_PROVIDER: \"${normalized}\". Expected \"none\", \"deepgram\", or \"voxtral\".`,
   );
 }
 
@@ -170,6 +178,14 @@ function buildVaultConfig(rootPath: string): VaultConfig {
 function buildTranscriptionConfig(provider: TranscriptionProviderKind): AppConfig['transcription'] {
   const deepgramModel = optionalEnv('DEEPGRAM_MODEL') ?? 'nova-2';
   const voxtralModel = optionalEnv('VOXTRAL_MODEL') ?? 'mistral-voxtral-mini-latest';
+
+  if (provider === 'none') {
+    return {
+      provider,
+      deepgramModel,
+      voxtralModel,
+    };
+  }
 
   if (provider === 'deepgram') {
     const deepgramApiKey = requiredEnv('DEEPGRAM_API_KEY');

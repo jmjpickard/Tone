@@ -1,6 +1,6 @@
 import { config } from './config.js';
 
-export type TranscriptionProviderName = 'deepgram' | 'voxtral';
+export type TranscriptionProviderName = 'none' | 'deepgram' | 'voxtral';
 
 export interface TranscriptionResult {
   text: string;
@@ -282,9 +282,22 @@ class VoxtralProvider implements TranscriptionProvider {
   }
 }
 
+class DisabledProvider implements TranscriptionProvider {
+  async transcribe(): Promise<TranscriptionResult> {
+    throw new TranscriptionError(
+      'Voice transcription is disabled. Set TRANSCRIPTION_PROVIDER to deepgram or voxtral.',
+      'configuration_error',
+    );
+  }
+}
+
 export function createTranscriber(
   provider: TranscriptionProviderName = config.transcription.provider,
 ): TranscriptionProvider {
+  if (provider === 'none') {
+    return new DisabledProvider();
+  }
+
   if (provider === 'deepgram') {
     const apiKey = config.transcription.deepgramApiKey;
     if (!apiKey) {

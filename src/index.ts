@@ -316,6 +316,13 @@ bot.on(message('voice'), async (ctx) => {
       status: transcriptionError.status,
       details: transcriptionError.details,
     });
+    if (transcriptionError.code === 'configuration_error') {
+      await ctx.reply(
+        'Voice notes are disabled in your current setup. Run `tone onboard` to enable Deepgram or Voxtral.',
+      );
+      return;
+    }
+
     await ctx.reply('I could not process that voice note. Please try again or send text instead.');
   }
 });
