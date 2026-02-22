@@ -12,6 +12,9 @@ interface InteractionPreview {
   assistantResponse: string;
 }
 
+const ONBOARDING_CONTEXT_THRESHOLD = 8;
+const MIN_PROFILE_FACTS = 3;
+
 function extractInputText(input: Interaction['input'] | unknown): string {
   if (!input || typeof input !== 'object' || !('type' in input)) {
     return '';
@@ -112,6 +115,44 @@ async function readPersonality(): Promise<string> {
   }
 }
 
+async function readAboutUser(): Promise<string> {
+  try {
+    const note = await readNote('config/about-user.md');
+    return note.content.trim();
+  } catch {
+    return '';
+  }
+}
+
+function countProfileFacts(aboutUser: string): number {
+  return aboutUser
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .reduce((count, line) => {
+      if (!line.startsWith('-')) {
+        return count;
+      }
+
+      const value = line.slice(1).trim();
+      if (!value) {
+        return count;
+      }
+
+      const separatorIndex = value.indexOf(':');
+      if (separatorIndex === -1) {
+        return count + 1;
+      }
+
+      const fieldValue = value.slice(separatorIndex + 1).trim();
+      return fieldValue.length > 0 ? count + 1 : count;
+    }, 0);
+}
+
+function shouldUseOnboardingMode(aboutUser: string, previews: InteractionPreview[]): boolean {
+  const profileFacts = countProfileFacts(aboutUser);
+  return profileFacts < MIN_PROFILE_FACTS || previews.length < ONBOARDING_CONTEXT_THRESHOLD;
+}
+
 function formatRecentContext(previews: InteractionPreview[]): string {
   if (previews.length === 0) {
     return '(none)';
@@ -129,21 +170,37 @@ function formatRecentContext(previews: InteractionPreview[]): string {
 export const chatSkill: SkillHandler = {
   name: 'chat',
   async execute(input): Promise<SkillResult> {
-    const [personality, recentPreviews] = await Promise.all([
+    const [personality, aboutUser, recentPreviews] = await Promise.all([
       readPersonality(),
+      readAboutUser(),
       loadRecentInteractionPreviews(6),
     ]);
+    const onboardingMode = shouldUseOnboardingMode(aboutUser, recentPreviews);
+    const onboardingGuidance = onboardingMode
+      ? [
+          'Onboarding mode is active.',
+          'Sound engaged, curious, and owner-focused.',
+          'In each response: answer the user directly, ask up to two focused follow-up questions, and suggest one concrete way Tone can help this week.',
+          'Avoid detached or generic phrasing.',
+        ].join('\n')
+      : 'Continue adapting to the user context while remaining concise and practical.';
 
     const messages = [
       {
         role: 'system' as const,
         content: [
           'You are Tone, a personal AI assistant.',
+          'Your primary mission is to understand this specific user and make yourself progressively more useful to them.',
           'Respond concisely, clearly, and pragmatically.',
           'Do not fabricate facts or private context.',
           '',
+          onboardingGuidance,
+          '',
           'Personality guidance:',
           personality || '(no personality file found)',
+          '',
+          'About user note:',
+          aboutUser || '(no about-user note found)',
           '',
           'Recent interaction context:',
           formatRecentContext(recentPreviews),

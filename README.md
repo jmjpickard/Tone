@@ -69,9 +69,22 @@ Then onboard once and start Tone:
 ```bash
 tone onboard
 tone start
+tone status
 ```
 
 `tone onboard` writes your config to `~/.tone/.env` (or `TONE_ENV_PATH` if set) and initializes the vault automatically.
+`tone start` runs Tone in the background so it keeps running after you close your SSH session.
+
+Useful runtime commands:
+
+```bash
+tone status
+tone logs
+tone logs -n 120
+tone stop
+```
+
+Use `tone start --foreground` if you want to keep it attached to the current terminal.
 
 If you need to install from a fork or branch:
 
@@ -123,6 +136,13 @@ If the app fails during startup with a missing environment variable error, updat
 - `VOXTRAL_ENDPOINT` (when `TRANSCRIPTION_PROVIDER=voxtral`)
 
 Also set `TELEGRAM_DEFAULT_CHAT_ID` if you want scheduled briefings/nightly/weekly messages to be delivered automatically.
+
+If `tone start` exits quickly, run:
+
+```bash
+tone status
+tone logs -n 120
+```
 
 If `tone onboard` fails with `Permission denied`, reinstall with:
 

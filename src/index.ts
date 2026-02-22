@@ -265,7 +265,16 @@ async function processInteraction(
 
 bot.start(async (ctx) => {
   await ctx.reply(
-    'Tone is online. Send text or voice. I will route it through skills and log feedback via 👍/👎.',
+    [
+      'Tone is online and ready to support you.',
+      '',
+      'To personalize quickly, tell me:',
+      '1) What you are trying to improve right now',
+      '2) How you like to work (planning cadence, communication style)',
+      '3) What you want me to take off your plate this week',
+      '',
+      'I will adapt around your answers and keep learning from each interaction.',
+    ].join('\n'),
   );
 });
 

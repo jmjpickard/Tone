@@ -414,7 +414,7 @@ export async function onboard(): Promise<void> {
       console.log(`Using existing vault at ${answers.vaultPath}`);
     }
     console.log('');
-    console.log('Next: run `tone start`');
+    console.log('Next: run `tone start` (background mode), then `tone status` and `tone logs`.');
   } finally {
     rl.close();
   }
