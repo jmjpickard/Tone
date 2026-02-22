@@ -37,7 +37,7 @@ Keep personal data in the vault repo only.
 
 ## Environment
 
-Copy `/Users/jackpickard/Documents/repos/tone/.env.example` to `.env` and set required values:
+Copy `.env.example` to `.env` and set required values:
 
 - Required:
   - `TELEGRAM_BOT_TOKEN`
@@ -53,6 +53,28 @@ Copy `/Users/jackpickard/Documents/repos/tone/.env.example` to `.env` and set re
   - `NIGHTLY_CRON=0 23 * * *`
   - `WEEKLY_CRON=0 15 * * 5`
   - `DEFAULT_RESPONSE_VERBOSITY=balanced`
+
+## Quickstart (Install + Start)
+
+To make the `tone` command available globally, install Tone from this repository and then run `tone start`:
+
+```bash
+cd /path/to/tone
+npm install
+npm run build
+npm install --global .
+tone start
+```
+
+If you update Tone later, rebuild and reinstall globally:
+
+```bash
+cd /path/to/tone
+git pull
+npm install
+npm run build
+npm install --global .
+```
 
 ## Raspberry Pi Deploy (Fresh)
 
@@ -139,9 +161,9 @@ This gives you reproducible deployments and easier rollback (`git checkout <olde
 
 ## Scripts
 
-- `/Users/jackpickard/Documents/repos/tone/scripts/setup.sh`
+- `scripts/setup.sh`
   - Installs dependencies, validates env, initializes vault if needed
-- `/Users/jackpickard/Documents/repos/tone/scripts/init-vault.sh`
+- `scripts/init-vault.sh`
   - Creates vault from template and initializes vault git repo
-- `/Users/jackpickard/Documents/repos/tone/scripts/service.sh`
+- `scripts/service.sh`
   - Installs and manages systemd service (`install|start|stop|restart|status`)
