@@ -47,7 +47,21 @@ interface AppConfig {
 function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value || value.trim() === '') {
-    throw new Error(`Missing required environment variable: ${name}`);
+    const setupHints: Partial<Record<string, string>> = {
+      TELEGRAM_BOT_TOKEN: 'Set your Telegram bot token from BotFather.',
+      OPENROUTER_API_KEY: 'Set your OpenRouter API key (https://openrouter.ai/keys).',
+      DEEPGRAM_API_KEY: 'Set your Deepgram API key when TRANSCRIPTION_PROVIDER=deepgram.',
+      VOXTRAL_ENDPOINT: 'Set your Voxtral transcription endpoint when TRANSCRIPTION_PROVIDER=voxtral.',
+      VAULT_PATH: 'Set an absolute path where the Tone vault should live.',
+      TONE_TIMEZONE: 'Set an IANA timezone, for example Europe/London.',
+    };
+
+    const hint = setupHints[name];
+    throw new Error(
+      hint
+        ? `Missing required environment variable: ${name}. ${hint}`
+        : `Missing required environment variable: ${name}`,
+    );
   }
 
   return value.trim();

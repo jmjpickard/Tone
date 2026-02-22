@@ -13,6 +13,21 @@ error() {
   printf '[setup] ERROR: %s\n' "$*" >&2
 }
 
+print_env_guidance() {
+  cat >&2 <<'GUIDE'
+[setup] Please add the missing keys to your .env file before starting Tone.
+[setup] Example required values:
+[setup]   TELEGRAM_BOT_TOKEN=<telegram bot token>
+[setup]   OPENROUTER_API_KEY=<openrouter api key>
+[setup]   VAULT_PATH=/absolute/path/to/your/vault
+[setup]   TONE_TIMEZONE=Europe/London
+[setup]   TRANSCRIPTION_PROVIDER=deepgram
+[setup]   DEEPGRAM_API_KEY=<deepgram api key>
+[setup] Optional but recommended for proactive loops:
+[setup]   TELEGRAM_DEFAULT_CHAT_ID=<telegram chat id>
+GUIDE
+}
+
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     error "Missing required command: $1"
@@ -68,7 +83,12 @@ esac
 if (( ${#missing_vars[@]} > 0 )); then
   error "Missing required environment variables: ${missing_vars[*]}"
   error "Set them in $ENV_FILE or export them before running setup."
+  print_env_guidance
   exit 1
+fi
+
+if [[ -z "${TELEGRAM_DEFAULT_CHAT_ID:-}" ]]; then
+  log "TELEGRAM_DEFAULT_CHAT_ID is not set; proactive loops cannot send scheduled messages until it is configured."
 fi
 
 log "Installing Node.js dependencies"
