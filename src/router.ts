@@ -143,10 +143,38 @@ function heuristicIntent(message: string): RouterResult {
   const lowered = message.toLowerCase();
   const entities: RouterResult['extractedEntities'] = {};
 
-  if (/\b(rollback|revert|undo|go back|snapshot)\b/.test(lowered)) {
+  if (
+    /\b(rollback|revert|undo|go back|snapshot|save state|save this state|bookmark this state)\b/.test(
+      lowered,
+    )
+  ) {
+    const snapshotMatch = message.match(
+      /(?:save(?: this)? state as|snapshot(?: this)?(?: state)? as|bookmark(?: this)?(?: state)? as)\s+["']?([^"']+)["']?/i,
+    );
+    if (snapshotMatch?.[1]) {
+      entities.action = 'snapshot';
+      entities.snapshotName = snapshotMatch[1].trim();
+    } else {
+      entities.action = 'rollback';
+    }
+
     const weekMatch = lowered.match(/week\s+(\d{1,2})/);
     if (weekMatch?.[1]) {
       entities.reference = `week-${weekMatch[1].padStart(2, '0')}`;
+    }
+
+    const explicitRefMatch = lowered.match(/\b(?:rollback|revert|undo|go back to)\s+([a-z0-9._/-]+)/);
+    if (!entities.reference && explicitRefMatch?.[1]) {
+      entities.reference = explicitRefMatch[1];
+    }
+
+    const filePathMatch = message.match(/\b([a-z0-9/_-]+\.md)\b/i);
+    if (filePathMatch?.[1]) {
+      entities.path = filePathMatch[1];
+    } else if (/\bbriefing\b/.test(lowered)) {
+      entities.path = 'skills/briefing.md';
+    } else if (/\bpersonality\b/.test(lowered)) {
+      entities.path = 'config/personality.md';
     }
 
     return {
@@ -160,6 +188,11 @@ function heuristicIntent(message: string): RouterResult {
     const sinceMatch = lowered.match(/since\s+([^?.!]+)/);
     if (sinceMatch?.[1]) {
       entities.since = sinceMatch[1].trim();
+    }
+
+    const weekMatch = lowered.match(/week\s+(\d{1,2})/);
+    if (weekMatch?.[1]) {
+      entities.reference = `week-${weekMatch[1].padStart(2, '0')}`;
     }
 
     return {

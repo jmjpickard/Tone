@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "dotenv": "^16.6.1",
+    "node-cron": "^4.2.1",
+    "simple-git": "^3.28.0",
     "telegraf": "^4.16.3",
     "yaml": "^2.8.1"
   },

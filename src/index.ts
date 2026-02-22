@@ -1,10 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Telegraf, type Context } from 'telegraf';
+import { Markup, Telegraf, type Context } from 'telegraf';
 import { message } from 'telegraf/filters';
 import { config } from './config.js';
-import { logFeedbackSignal, logInteraction } from './feedback.js';
+import {
+  detectCorrection,
+  findMostRecentInteractionForUser,
+  logCorrection,
+  logFeedbackSignal,
+  logInteraction,
+} from './feedback.js';
+import { generateIntrospectionSummary } from './introspection.js';
+import { scheduleBriefing, trackBriefingEngagement } from './loops/briefing.js';
+import { scheduleNightly } from './loops/nightly.js';
+import { handleWeeklyApprovalDecision, scheduleWeekly } from './loops/weekly.js';
+import { cancelRollback, confirmRollback, handleRollbackRequest } from './rollback.js';
 import { route } from './router.js';
 import { resolveSkill } from './skills/index.js';
 import { loadSkills } from './skills/loader.js';
@@ -47,6 +58,12 @@ async function processInteraction(
     return;
   }
 
+  try {
+    await trackBriefingEngagement(userId);
+  } catch (error) {
+    console.error('[tone] failed to track briefing engagement', error);
+  }
+
   let skillDefinitions: SkillDefinition[] = [];
   try {
     skillDefinitions = await loadSkills();
@@ -62,6 +79,111 @@ async function processInteraction(
     });
   } catch (error) {
     console.error('[tone] routing error', error);
+  }
+
+  if (routing.intent !== 'rollback' && routing.intent !== 'introspection') {
+    try {
+      const previousInteraction = await findMostRecentInteractionForUser(userId);
+      const detectedCorrection = detectCorrection({
+        text: normalizedText,
+        previousInteraction,
+      });
+
+      if (detectedCorrection) {
+        await logCorrection({
+          userId,
+          ...(detectedCorrection.interactionId
+            ? { interactionId: detectedCorrection.interactionId }
+            : {}),
+          previousBehavior: detectedCorrection.previousBehavior,
+          desiredBehavior: detectedCorrection.desiredBehavior,
+          learnedRule: detectedCorrection.learnedRule,
+        });
+      }
+    } catch (error) {
+      console.error('[tone] correction detection/logging failed', error);
+    }
+  }
+
+  if (routing.intent === 'rollback') {
+    let responseText = 'I could not process that rollback request.';
+
+    try {
+      const rollbackResult = await handleRollbackRequest({
+        userId,
+        text: normalizedText,
+        entities: routing.extractedEntities,
+      });
+      responseText = rollbackResult.message;
+
+      if (rollbackResult.status === 'prepared' && rollbackResult.pendingId) {
+        await ctx.reply(responseText, {
+          reply_markup: Markup.inlineKeyboard([
+            [
+              Markup.button.callback('Confirm rollback', `rollback:confirm:${rollbackResult.pendingId}`),
+              Markup.button.callback('Cancel', `rollback:cancel:${rollbackResult.pendingId}`),
+            ],
+          ]).reply_markup,
+        });
+      } else {
+        await sendWithReactions(ctx, responseText, interactionId);
+      }
+    } catch (error) {
+      console.error('[tone] rollback intent handling failed', error);
+      responseText = 'I could not process that rollback request. Please provide a valid reference.';
+      await ctx.reply(responseText);
+    }
+
+    try {
+      await logInteraction({
+        id: interactionId,
+        timestamp,
+        userId,
+        input,
+        intent: routing.intent,
+        skillUsed: 'rollback',
+        response: responseText,
+        feedbackSignal: null,
+      });
+    } catch (error) {
+      console.error('[tone] failed to log rollback interaction', error);
+    }
+
+    return;
+  }
+
+  if (routing.intent === 'introspection') {
+    let responseText = 'I could not generate an evolution summary right now.';
+
+    try {
+      const introspection = await generateIntrospectionSummary({
+        text: normalizedText,
+        entities: routing.extractedEntities,
+      });
+      responseText = `What changed since ${introspection.fromRef}:\n\n${introspection.summary}`;
+      await sendWithReactions(ctx, responseText, interactionId);
+    } catch (error) {
+      console.error('[tone] introspection intent handling failed', error);
+      responseText = 'I could not generate an evolution summary. Check that your references exist.';
+      await ctx.reply(responseText);
+    }
+
+    try {
+      await logInteraction({
+        id: interactionId,
+        timestamp,
+        userId,
+        input,
+        intent: routing.intent,
+        skillUsed: 'introspection',
+        response: responseText,
+        feedbackSignal: null,
+      });
+    } catch (error) {
+      console.error('[tone] failed to log introspection interaction', error);
+    }
+
+    return;
   }
 
   let selectedSkill = resolveSkill(routing.intent);
@@ -205,6 +327,46 @@ bot.on('callback_query', async (ctx) => {
     return;
   }
 
+  const rollbackMatch = callbackQuery.data.match(/^rollback:(confirm|cancel):([0-9a-f-]+)$/i);
+  if (rollbackMatch?.[1] && rollbackMatch[2]) {
+    const userId = String(ctx.from?.id ?? 'unknown');
+
+    try {
+      const outcome =
+        rollbackMatch[1] === 'confirm'
+          ? await confirmRollback(rollbackMatch[2], userId)
+          : await cancelRollback(rollbackMatch[2], userId);
+      await ctx.answerCbQuery(outcome.message);
+      await ctx.reply(outcome.message);
+    } catch (error) {
+      console.error('[tone] rollback callback failed', error);
+      await ctx.answerCbQuery('Unable to process rollback decision.');
+    }
+
+    return;
+  }
+
+  const weeklyMatch = callbackQuery.data.match(/^weekly:(approve|reject):(\d{4}-W\d{2})$/);
+  if (weeklyMatch?.[1] && weeklyMatch[2]) {
+    const decision = weeklyMatch[1] === 'approve' ? 'approve' : 'reject';
+    try {
+      const result = await handleWeeklyApprovalDecision({
+        decision,
+        weekKey: weeklyMatch[2],
+        userId: String(ctx.from?.id ?? 'unknown'),
+        reason:
+          decision === 'approve'
+            ? 'Approved from Telegram inline control'
+            : 'Rejected from Telegram inline control',
+      });
+      await ctx.answerCbQuery(result.message);
+    } catch (error) {
+      console.error('[tone] weekly approval callback failed', error);
+      await ctx.answerCbQuery('Unable to process weekly decision.');
+    }
+    return;
+  }
+
   const match = callbackQuery.data.match(/^feedback:(up|down):(.+)$/);
   if (!match?.[1] || !match[2]) {
     await ctx.answerCbQuery('Unknown action.');
@@ -239,6 +401,17 @@ bot.catch(async (error, ctx) => {
 
 async function launch(): Promise<void> {
   await bot.launch();
+
+  scheduleBriefing({
+    bot,
+  });
+  scheduleNightly({
+    bot,
+  });
+  scheduleWeekly({
+    bot,
+  });
+
   console.log('[tone] bot is running');
 }
 

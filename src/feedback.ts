@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.js';
+import { commit } from './evolution.js';
 import type { FeedbackEvent, Interaction } from './types.js';
 
 export interface FeedbackSignalInput {
@@ -16,6 +17,19 @@ export interface CorrectionInput {
   desiredBehavior: string;
   learnedRule: string;
   interactionId?: string;
+}
+
+export interface ImplicitFeedbackInput {
+  userId: string;
+  signal: 'engagement_timing' | 'draft_acceptance';
+  value: number;
+  note?: string;
+  interactionId?: string;
+}
+
+export interface CorrectionDetectionInput {
+  text: string;
+  previousInteraction?: Interaction | null;
 }
 
 function dateStampInTimezone(date: Date): string {
@@ -37,6 +51,140 @@ function dateStampInTimezone(date: Date): string {
 async function appendJsonLine(filePath: string, payload: unknown): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.appendFile(filePath, `${JSON.stringify(payload)}\n`, 'utf8');
+}
+
+function normalizeText(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+function parseJsonLines<T>(raw: string): T[] {
+  if (!raw.trim()) {
+    return [];
+  }
+
+  return raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      try {
+        return JSON.parse(line) as T;
+      } catch {
+        return null;
+      }
+    })
+    .filter((item): item is T => item !== null);
+}
+
+function formatPreviousBehavior(interaction: Interaction | null | undefined): string {
+  if (!interaction) {
+    return 'No prior interaction context was available.';
+  }
+
+  const preview = normalizeText(interaction.response).slice(0, 180);
+  return `Interaction ${interaction.id}: ${preview || '(empty response)'}`;
+}
+
+function inferLearnedRule(text: string): string {
+  const lowered = text.toLowerCase();
+
+  const destinationMatch = lowered.match(/\b(?:to|into|under|in)\s+([a-z0-9_\-/]+)/i);
+  if (destinationMatch?.[1]) {
+    return `When corrected, prioritize explicit destination "${destinationMatch[1]}" over inferred filing rules.`;
+  }
+
+  if (/\b(refile|move|put this|file this|wrong thread|wrong folder)\b/.test(lowered)) {
+    return 'When user re-files content, preserve the user-specified destination and update filing heuristics.';
+  }
+
+  if (/^(no|nope|nah|actually|instead|wrong|not that)\b/.test(lowered)) {
+    return 'When user issues an explicit correction, prefer the new instruction and avoid repeating the prior behavior.';
+  }
+
+  return 'Treat this message as corrective feedback and bias toward the user-provided behavior.';
+}
+
+export function detectCorrection(input: CorrectionDetectionInput): Omit<CorrectionInput, 'userId'> | null {
+  const text = normalizeText(input.text);
+  if (!text) {
+    return null;
+  }
+
+  const lowered = text.toLowerCase();
+  const startsWithCorrection = /^(no|nope|nah|actually|instead|wrong|not that|you should|do this)\b/.test(
+    lowered,
+  );
+  const mentionsRefiling =
+    /\b(refile|file this|move this|put this|wrong thread|wrong folder|wrong project)\b/.test(lowered);
+  const explicitOverride = /\b(do x|do y|do this|should be|use .* instead)\b/.test(lowered);
+
+  if (!startsWithCorrection && !mentionsRefiling && !explicitOverride) {
+    return null;
+  }
+
+  const previousBehavior = formatPreviousBehavior(input.previousInteraction);
+  const desiredBehavior = text;
+  const learnedRule = inferLearnedRule(text);
+
+  return {
+    ...(input.previousInteraction?.id ? { interactionId: input.previousInteraction.id } : {}),
+    previousBehavior,
+    desiredBehavior,
+    learnedRule,
+  };
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === 'ENOENT'
+  );
+}
+
+async function listInteractionLogs(): Promise<string[]> {
+  const interactionDir = path.join(config.vault.feedbackDir, 'interactions');
+
+  try {
+    const entries = await fs.readdir(interactionDir, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(entry.name))
+      .map((entry) => path.join(interactionDir, entry.name))
+      .sort((left, right) => right.localeCompare(left));
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+export async function findMostRecentInteractionForUser(
+  userId: string,
+  lookbackDays = 7,
+): Promise<Interaction | null> {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+
+  const files = await listInteractionLogs();
+  const limitedFiles = files.slice(0, Math.max(1, lookbackDays));
+
+  for (const filePath of limitedFiles) {
+    const raw = await fs.readFile(filePath, 'utf8');
+    const interactions = parseJsonLines<Interaction>(raw)
+      .filter((interaction) => interaction.userId === normalizedUserId)
+      .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
+
+    const found = interactions[0];
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
 }
 
 export async function logInteraction(interaction: Interaction): Promise<void> {
@@ -105,6 +253,36 @@ export async function logCorrection(input: CorrectionInput): Promise<FeedbackEve
 
   const dateStamp = dateStampInTimezone(new Date(timestamp));
   const jsonlPath = path.join(config.vault.feedbackDir, 'interactions', `corrections-${dateStamp}.jsonl`);
+  await appendJsonLine(jsonlPath, {
+    ...event,
+    userId: input.userId,
+  });
+
+  await commit(`learned correction from user ${input.userId} | ${input.learnedRule}`, 'correction');
+
+  return event;
+}
+
+export async function logImplicitFeedback(input: ImplicitFeedbackInput): Promise<FeedbackEvent> {
+  const timestamp = new Date().toISOString();
+  const normalizedValue = Number.isFinite(input.value) ? Math.max(0, Math.min(1, input.value)) : 0;
+  const eventType =
+    input.signal === 'engagement_timing' ? 'implicit_engagement_timing' : 'implicit_draft_acceptance';
+
+  const event: FeedbackEvent = {
+    id: randomUUID(),
+    timestamp,
+    ...(input.interactionId ? { interactionId: input.interactionId } : {}),
+    type: eventType,
+    details: {
+      implicitSignal: input.signal,
+      value: normalizedValue,
+      ...(input.note ? { note: input.note } : {}),
+    },
+  };
+
+  const dateStamp = dateStampInTimezone(new Date(timestamp));
+  const jsonlPath = path.join(config.vault.feedbackDir, 'interactions', `implicit-${dateStamp}.jsonl`);
   await appendJsonLine(jsonlPath, {
     ...event,
     userId: input.userId,

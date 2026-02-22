@@ -5,13 +5,23 @@ import type { LLMTier, VaultConfig } from './types.js';
 loadDotEnv();
 
 type TranscriptionProviderKind = 'deepgram' | 'voxtral';
+type ResponseVerbosity = 'concise' | 'balanced' | 'detailed';
 
 interface AppConfig {
   telegramBotToken: string;
+  telegram: {
+    defaultChatId?: string;
+  };
   openRouterApiKey: string;
   timezone: string;
   routing: {
     confidenceThreshold: number;
+  };
+  loops: {
+    briefingCron: string;
+    nightlyCron: string;
+    weeklyCron: string;
+    defaultResponseVerbosity: ResponseVerbosity;
   };
   vault: VaultConfig;
   openRouter: {
@@ -98,6 +108,36 @@ function parseConfidenceThreshold(rawValue: string | undefined): number {
   return parsed;
 }
 
+function parseCronExpression(
+  envName: 'BRIEFING_CRON' | 'NIGHTLY_CRON' | 'WEEKLY_CRON',
+  fallback: string,
+): string {
+  const rawValue = optionalEnv(envName);
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parts = rawValue.split(/\s+/).filter((part) => part.length > 0);
+  if (parts.length !== 5 && parts.length !== 6) {
+    throw new Error(
+      `Invalid ${envName}: \"${rawValue}\". Expected a cron expression with 5 or 6 fields.`,
+    );
+  }
+
+  return rawValue;
+}
+
+function parseResponseVerbosity(rawValue: string | undefined): ResponseVerbosity {
+  const normalized = (rawValue ?? 'balanced').trim().toLowerCase();
+  if (normalized === 'concise' || normalized === 'balanced' || normalized === 'detailed') {
+    return normalized;
+  }
+
+  throw new Error(
+    `Invalid DEFAULT_RESPONSE_VERBOSITY: \"${normalized}\". Expected \"concise\", \"balanced\", or \"detailed\".`,
+  );
+}
+
 function buildVaultConfig(rootPath: string): VaultConfig {
   return {
     rootPath,
@@ -143,13 +183,27 @@ const timezone = validateTimezone(requiredEnv('TONE_TIMEZONE'));
 const vaultRoot = validateVaultPath(requiredEnv('VAULT_PATH'));
 const transcriptionProvider = validateTranscriptionProvider(process.env.TRANSCRIPTION_PROVIDER);
 const routerConfidenceThreshold = parseConfidenceThreshold(process.env.ROUTER_CONFIDENCE_THRESHOLD);
+const defaultChatId = optionalEnv('TELEGRAM_DEFAULT_CHAT_ID');
+const briefingCron = parseCronExpression('BRIEFING_CRON', '30 7 * * *');
+const nightlyCron = parseCronExpression('NIGHTLY_CRON', '0 23 * * *');
+const weeklyCron = parseCronExpression('WEEKLY_CRON', '0 15 * * 5');
+const defaultResponseVerbosity = parseResponseVerbosity(process.env.DEFAULT_RESPONSE_VERBOSITY);
 
 export const config: AppConfig = {
   telegramBotToken: requiredEnv('TELEGRAM_BOT_TOKEN'),
+  telegram: {
+    ...(defaultChatId ? { defaultChatId } : {}),
+  },
   openRouterApiKey: requiredEnv('OPENROUTER_API_KEY'),
   timezone,
   routing: {
     confidenceThreshold: routerConfidenceThreshold,
+  },
+  loops: {
+    briefingCron,
+    nightlyCron,
+    weeklyCron,
+    defaultResponseVerbosity,
   },
   vault: buildVaultConfig(vaultRoot),
   openRouter: {
@@ -180,4 +234,4 @@ export const config: AppConfig = {
   transcription: buildTranscriptionConfig(transcriptionProvider),
 };
 
-export type { AppConfig, TranscriptionProviderKind };
+export type { AppConfig, ResponseVerbosity, TranscriptionProviderKind };
