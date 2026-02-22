@@ -6,7 +6,8 @@ async function run(): Promise<void> {
 
   try {
     if (command === 'start') {
-      await import('./index.js');
+      const { launch } = await import('./index.js');
+      await launch();
       return;
     }
 

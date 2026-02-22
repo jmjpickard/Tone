@@ -432,4 +432,4 @@ if (isMainModule) {
   });
 }
 
-export { bot };
+export { bot, launch };
