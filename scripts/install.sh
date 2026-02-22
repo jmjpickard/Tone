@@ -61,6 +61,10 @@ log "Building Tone"
   npm run build
 )
 
+if [[ -f "$TONE_APP_PATH/dist/cli.js" ]]; then
+  chmod +x "$TONE_APP_PATH/dist/cli.js"
+fi
+
 log "Installing Tone CLI globally"
 if ! (
   cd "$TONE_APP_PATH"
@@ -69,6 +73,11 @@ if ! (
   error "Global npm install failed."
   error "Configure your npm global prefix or rerun with elevated privileges if required."
   exit 1
+fi
+
+GLOBAL_NODE_MODULES="$(npm root --global)"
+if [[ -f "$GLOBAL_NODE_MODULES/tone/dist/cli.js" ]]; then
+  chmod +x "$GLOBAL_NODE_MODULES/tone/dist/cli.js"
 fi
 
 log "Tone CLI installed."

@@ -124,6 +124,12 @@ If the app fails during startup with a missing environment variable error, updat
 
 Also set `TELEGRAM_DEFAULT_CHAT_ID` if you want scheduled briefings/nightly/weekly messages to be delivered automatically.
 
+If `tone onboard` fails with `Permission denied`, reinstall with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jmjpickard/Tone/main/scripts/install.sh | bash
+```
+
 ## Operational Smoke Checks
 
 After startup in Telegram, test:
