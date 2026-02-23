@@ -88,6 +88,12 @@ async function run(): Promise<void> {
       return;
     }
 
+    if (command === 'update') {
+      const { update } = await import('./update.js');
+      await update();
+      return;
+    }
+
     if (command === 'help' || command === '--help' || command === '-h') {
       console.log(
         [
@@ -99,6 +105,7 @@ async function run(): Promise<void> {
           '  tone status                Show Tone process status',
           '  tone logs [-n N]           Show recent Tone logs',
           '  tone onboard               Configure Tone and initialize the vault',
+          '  tone update                Update Tone to the latest release',
           '  tone uninstall             Remove Tone from this machine',
           '  tone help                  Show this help message',
         ].join('\n'),
