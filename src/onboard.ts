@@ -387,6 +387,15 @@ export async function onboard(): Promise<void> {
     let gmailTokenPath = existingEnv.GMAIL_TOKEN_PATH ?? path.join(toneHomePath, 'gmail-token.json');
 
     if (gmailEnabled) {
+      console.log('');
+      console.log('Gmail OAuth setup:');
+      console.log('  1. Go to https://console.cloud.google.com/ and create an OAuth 2.0 Client ID.');
+      console.log('  2. Set the application type to "Desktop app".');
+      console.log('  3. Add http://localhost:8085/oauth2/callback as an authorized redirect URI.');
+      console.log('  4. Paste the client ID and secret below.');
+      console.log('  After setup, run /connect in Telegram to authorize via your browser.');
+      console.log('');
+
       gmailClientId = await promptRequired(rl, 'Gmail OAuth client ID', gmailClientId);
       gmailClientSecret = await promptRequired(rl, 'Gmail OAuth client secret', gmailClientSecret);
       gmailRedirectUri = await promptRequired(
@@ -531,6 +540,9 @@ export async function onboard(): Promise<void> {
     }
     console.log('');
     console.log('Next: run `tone start` (background mode), then `tone status` and `tone logs`.');
+    if (answers.gmailEnabled) {
+      console.log('Then send /connect in Telegram to authorize Google access via your browser.');
+    }
   } finally {
     rl.close();
   }

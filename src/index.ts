@@ -15,6 +15,11 @@ import { generateIntrospectionSummary } from './introspection.js';
 import { scheduleBriefing, scheduleEveningRecap, scheduleMiddayReminder, trackBriefingEngagement } from './loops/briefing.js';
 import { scheduleNightly } from './loops/nightly.js';
 import { handleWeeklyApprovalDecision, scheduleWeekly } from './loops/weekly.js';
+import { exchangeCode, getConnectionStatus, startAuth } from './integrations/gmail/auth.js';
+import {
+  extractPortFromRedirectUri,
+  startCallbackServer,
+} from './integrations/google/callback-server.js';
 import { cancelRollback, confirmRollback, handleRollbackRequest } from './rollback.js';
 import { route } from './router.js';
 import { cancelPendingEmailSend, confirmPendingEmailSend } from './skills/email.js';
@@ -279,6 +284,73 @@ async function processInteraction(
   }
 }
 
+/**
+ * Orchestrates the full Google OAuth loopback flow for a Telegram user.
+ * Generates the auth URL, starts a temporary callback server, sends the link
+ * via Telegram, then waits for Google to redirect back. On success the waiting
+ * message is edited in-place to show a confirmation. On failure or timeout a
+ * new message is sent with a "Try again" button.
+ */
+const runGoogleOAuthFlow = async (ctx: Context): Promise<void> => {
+  if (!config.gmail.enabled) {
+    await ctx.reply(
+      'Gmail is not configured.\n\nRun `tone onboard` to set up your Google OAuth credentials, then use /connect to authorize.',
+    );
+    return;
+  }
+
+  const chatId = ctx.chat?.id;
+  const { redirectUri } = config.gmail;
+  const port = extractPortFromRedirectUri(redirectUri);
+  const { url, state } = startAuth();
+  const serviceLabel = config.calendar.enabled ? 'Gmail + Calendar' : 'Gmail';
+
+  const waitingMessage = await ctx.reply(
+    [
+      `⏳ Waiting for Google authorization (up to 5 minutes)...`,
+      '',
+      'Tap below, sign in with Google, then return here. I will confirm once connected.',
+    ].join('\n'),
+    {
+      reply_markup: Markup.inlineKeyboard([
+        [Markup.button.url('Open Google sign-in ↗', url)],
+      ]).reply_markup,
+    },
+  );
+
+  try {
+    const { code } = await startCallbackServer({ port, expectedState: state });
+    await exchangeCode(code);
+
+    const successText = `✅ ${serviceLabel} connected. Your Google account is now authorized.`;
+
+    if (chatId) {
+      try {
+        await ctx.telegram.editMessageText(
+          chatId,
+          waitingMessage.message_id,
+          undefined,
+          successText,
+        );
+        return;
+      } catch {
+        /* Fall through to a fresh reply if the edit fails. */
+      }
+    }
+
+    await ctx.reply(successText);
+  } catch (error) {
+    const reason =
+      error instanceof Error ? error.message : 'Authorization failed. Please try again.';
+
+    await ctx.reply(reason, {
+      reply_markup: Markup.inlineKeyboard([
+        [Markup.button.callback('↩ Try again', 'connect:google')],
+      ]).reply_markup,
+    });
+  }
+};
+
 bot.start(async (ctx) => {
   await ctx.reply(
     [
@@ -291,6 +363,41 @@ bot.start(async (ctx) => {
       '',
       'I will adapt around your answers and keep learning from each interaction.',
     ].join('\n'),
+  );
+});
+
+bot.command('connect', async (ctx) => {
+  if (!config.gmail.enabled) {
+    await ctx.reply(
+      'Google integrations are not configured.\n\nRun `tone onboard` to set up Gmail or Calendar, then use /connect to authorize.',
+    );
+    return;
+  }
+
+  const serviceLabel = config.calendar.enabled ? 'Gmail + Calendar' : 'Gmail';
+
+  let statusLine: string;
+  try {
+    const status = await getConnectionStatus();
+    statusLine =
+      status.state === 'connected'
+        ? `✅ ${serviceLabel} is connected.`
+        : `${serviceLabel} is not yet authorized.`;
+  } catch {
+    statusLine = `${serviceLabel} connection status is unknown.`;
+  }
+
+  await ctx.reply(
+    [
+      statusLine,
+      '',
+      'Tap below to open Google sign-in in your browser. I will confirm here once done.',
+    ].join('\n'),
+    {
+      reply_markup: Markup.inlineKeyboard([
+        [Markup.button.callback(`Connect ${serviceLabel}`, 'connect:google')],
+      ]).reply_markup,
+    },
   );
 });
 
@@ -356,6 +463,14 @@ bot.on('callback_query', async (ctx) => {
   const callbackQuery = ctx.callbackQuery;
   if (!('data' in callbackQuery) || typeof callbackQuery.data !== 'string') {
     await ctx.answerCbQuery('Unsupported callback.');
+    return;
+  }
+
+  if (callbackQuery.data === 'connect:google') {
+    await ctx.answerCbQuery();
+    void runGoogleOAuthFlow(ctx).catch((error) => {
+      console.error('[tone] google oauth flow error', error);
+    });
     return;
   }
 

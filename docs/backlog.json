@@ -633,12 +633,47 @@
           ]
         },
         {
+          "id": "TONE-040a",
+          "epicId": "EPIC-6",
+          "title": "OAuth loopback callback server and Telegram connection flow",
+          "description": "Build the shared OAuth callback server and Telegram-native connection UX used by both Gmail and Calendar. When a user initiates a Google connection, the bot sends an inline 'Connect' button via Telegram. Tapping it generates an OAuth URL and starts a temporary loopback HTTP server on the Pi to capture the Google redirect. Once authorised, the token is captured automatically and the bot confirms success — no auth codes to copy and paste.",
+          "acceptanceCriteria": [
+            "src/integrations/google/callback-server.ts starts a temporary HTTP server on a configurable port (default 8080) to capture OAuth redirects",
+            "Server starts only during an active auth flow and shuts down immediately after token capture or a 5-minute timeout",
+            "startAuth(service) returns an OAuth URL with redirect_uri=http://localhost:{port}/callback and starts the callback server",
+            "Callback server extracts the authorization code, exchanges it for tokens, stores them, then shuts itself down",
+            "On success: Telegram confirmation sent (e.g. '✅ Gmail connected. Found 12 unread threads.')",
+            "On timeout or error: Telegram message sent with a clear failure reason and a 'Try again' inline button",
+            "Telegram inline 'Connect Gmail' / 'Connect Calendar' buttons trigger the flow (accessible via /connect command and from onboard.ts first-run prompts)",
+            "Google OAuth app type documented in README as 'Desktop app' — required for localhost redirect URIs, no port forwarding needed",
+            "Callback port configurable via GOOGLE_OAUTH_CALLBACK_PORT env var (default 8080)",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/integrations/google/callback-server.ts",
+            "src/onboard.ts",
+            ".env.example",
+            "src/index.ts"
+          ],
+          "dependencies": [
+            "TONE-040"
+          ],
+          "estimateHours": 2.5,
+          "tags": [
+            "gmail",
+            "calendar",
+            "auth",
+            "onboarding"
+          ]
+        },
+        {
           "id": "TONE-041",
           "epicId": "EPIC-6",
           "title": "Gmail auth and token lifecycle service",
           "description": "Build Gmail OAuth token handling service: generate auth URL, exchange authorization code, refresh tokens, and expose connection status with typed errors.",
           "acceptanceCriteria": [
             "src/integrations/gmail/auth.ts exports methods for startAuth, exchangeCode, refreshAccessToken, getConnectionStatus",
+            "startAuth delegates URL generation and callback capture to the shared callback-server (TONE-040a)",
             "Access token refresh occurs automatically before API calls when expired",
             "Token file is stored outside git-tracked project files (default under Tone home path)",
             "Token storage permissions are restrictive (user-readable only)",
@@ -651,7 +686,7 @@
             "src/paths.ts"
           ],
           "dependencies": [
-            "TONE-040"
+            "TONE-040a"
           ],
           "estimateHours": 3,
           "tags": [
@@ -981,7 +1016,8 @@
             "src/integrations/calendar/types.ts"
           ],
           "dependencies": [
-            "TONE-051"
+            "TONE-051",
+            "TONE-040a"
           ],
           "estimateHours": 3,
           "tags": [
