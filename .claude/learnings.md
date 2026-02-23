@@ -53,6 +53,14 @@
 - evolution.ts in EPIC-4 (not EPIC-5) because both nightly and weekly loops depend on git ops
 - Transcription is pluggable: TranscriptionProvider interface with Deepgram (cloud, Pi 4) and Voxtral Mini (self-hosted, Beelink) implementations. Provider selected via `TRANSCRIPTION_PROVIDER` env var.
 
+## Calendar Integration (EPIC-8)
+- Calendar reuses Gmail BYO OAuth — same Google Cloud project, `CALENDAR_SCOPES` added to auth flow when `CALENDAR_ENABLED=true`
+- Auth scope injection is in `gmail/auth.ts:buildOAuthScopes()` — dynamically adds calendar.readonly scope
+- Calendar client at `src/integrations/calendar/client.ts` — mirrors gmail client pattern (retry/backoff, typed errors, response normalization)
+- Calendar skill at `src/skills/calendar.ts` — three actions: `today` (day agenda), `week` (multi-day preview grouped by date), `meeting_prep` (event detail with attendees/description)
+- Calendar is read-only in v0.4.x — no event creation/modification
+- `CALENDAR_SYNC_WINDOW_DAYS` controls how far ahead the week preview looks (1-30, default 7)
+
 ## Implementation Progress
 - EPIC-1 / TONE-001 scaffold created:
   - `package.json` scripts: `build`, `dev`, `start`, `typecheck`

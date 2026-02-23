@@ -5,6 +5,13 @@ export interface BriefingPayload {
   priorities: string[];
   activeThreads: string[];
   pendingTasks: string[];
+  email?: {
+    status: 'available' | 'unavailable';
+    needsReply: string[];
+    waitingOnThem: string[];
+    staleThreads: string[];
+    note?: string;
+  };
 }
 
 export function formatBriefing(payload: BriefingPayload): string {
@@ -19,8 +26,31 @@ export function formatBriefing(payload: BriefingPayload): string {
     payload.pendingTasks.length > 0
       ? payload.pendingTasks.map((item) => `- ${item}`).join('\n')
       : '- None';
+  const emailSection =
+    payload.email === undefined
+      ? ''
+      : payload.email.status === 'unavailable'
+        ? ['*Email*', payload.email.note ? `- ${payload.email.note}` : '- Email triage unavailable.', ''].join(
+            '\n',
+          )
+        : [
+            '*Email*',
+            '*Needs Reply*',
+            payload.email.needsReply.length > 0 ? payload.email.needsReply.map((item) => `- ${item}`).join('\n') : '- None',
+            '',
+            '*Waiting On Them*',
+            payload.email.waitingOnThem.length > 0
+              ? payload.email.waitingOnThem.map((item) => `- ${item}`).join('\n')
+              : '- None',
+            '',
+            '*Stale Threads*',
+            payload.email.staleThreads.length > 0
+              ? payload.email.staleThreads.map((item) => `- ${item}`).join('\n')
+              : '- None',
+            '',
+          ].join('\n');
 
-  return [
+  const blocks = [
     `*${headline}*`,
     '',
     '*Priorities*',
@@ -31,7 +61,13 @@ export function formatBriefing(payload: BriefingPayload): string {
     '',
     '*Pending Tasks*',
     pendingTasks,
-  ].join('\n');
+  ];
+
+  if (emailSection) {
+    blocks.push('', emailSection.trimEnd());
+  }
+
+  return blocks.join('\n');
 }
 
 export function formatTaskList(tasks: string[], title = 'Tasks'): string {

@@ -27,6 +27,25 @@ export interface ImplicitFeedbackInput {
   interactionId?: string;
 }
 
+export interface TriageOutcomeInput {
+  userId: string;
+  action: 'triage_accepted' | 'snooze' | 'marked_done' | 'marked_no_reply' | 'ignored_urgent';
+  threadId: string;
+  snoozedUntil?: string;
+  note?: string;
+  interactionId?: string;
+}
+
+export interface EmailActionInput {
+  userId: string;
+  action: 'draft_generated' | 'send_confirmed' | 'send_canceled' | 'send_failed';
+  draftRef: string;
+  threadId?: string;
+  confirmationId?: string;
+  note?: string;
+  interactionId?: string;
+}
+
 export interface CorrectionDetectionInput {
   text: string;
   previousInteraction?: Interaction | null;
@@ -283,6 +302,86 @@ export async function logImplicitFeedback(input: ImplicitFeedbackInput): Promise
 
   const dateStamp = dateStampInTimezone(new Date(timestamp));
   const jsonlPath = path.join(config.vault.feedbackDir, 'interactions', `implicit-${dateStamp}.jsonl`);
+  await appendJsonLine(jsonlPath, {
+    ...event,
+    userId: input.userId,
+  });
+
+  return event;
+}
+
+function mapTriageActionToEventType(
+  action: TriageOutcomeInput['action'],
+): FeedbackEvent['type'] {
+  if (action === 'triage_accepted') return 'email_triage_accepted';
+  if (action === 'snooze') return 'email_snooze';
+  if (action === 'marked_done') return 'email_marked_done';
+  if (action === 'marked_no_reply') return 'email_marked_no_reply';
+  return 'email_ignored_urgent';
+}
+
+export async function logTriageOutcome(input: TriageOutcomeInput): Promise<FeedbackEvent> {
+  const timestamp = new Date().toISOString();
+  const event: FeedbackEvent = {
+    id: randomUUID(),
+    timestamp,
+    ...(input.interactionId ? { interactionId: input.interactionId } : {}),
+    type: mapTriageActionToEventType(input.action),
+    details: {
+      triageAction: {
+        action: input.action,
+        threadId: input.threadId,
+        ...(input.snoozedUntil ? { snoozedUntil: input.snoozedUntil } : {}),
+        ...(input.note ? { note: input.note } : {}),
+      },
+    },
+  };
+
+  const dateStamp = dateStampInTimezone(new Date(timestamp));
+  const jsonlPath = path.join(config.vault.feedbackDir, 'interactions', `email-actions-${dateStamp}.jsonl`);
+  await appendJsonLine(jsonlPath, {
+    ...event,
+    userId: input.userId,
+  });
+
+  return event;
+}
+
+function mapEmailActionToEventType(
+  action: EmailActionInput['action'],
+): FeedbackEvent['type'] {
+  if (action === 'draft_generated') {
+    return 'email_draft_generated';
+  }
+  if (action === 'send_confirmed') {
+    return 'email_send_confirmed';
+  }
+  if (action === 'send_canceled') {
+    return 'email_send_canceled';
+  }
+  return 'email_send_failed';
+}
+
+export async function logEmailAction(input: EmailActionInput): Promise<FeedbackEvent> {
+  const timestamp = new Date().toISOString();
+  const event: FeedbackEvent = {
+    id: randomUUID(),
+    timestamp,
+    ...(input.interactionId ? { interactionId: input.interactionId } : {}),
+    type: mapEmailActionToEventType(input.action),
+    details: {
+      emailAction: {
+        action: input.action,
+        draftRef: input.draftRef,
+        ...(input.threadId ? { threadId: input.threadId } : {}),
+        ...(input.confirmationId ? { confirmationId: input.confirmationId } : {}),
+        ...(input.note ? { note: input.note } : {}),
+      },
+    },
+  };
+
+  const dateStamp = dateStampInTimezone(new Date(timestamp));
+  const jsonlPath = path.join(config.vault.feedbackDir, 'interactions', `email-actions-${dateStamp}.jsonl`);
   await appendJsonLine(jsonlPath, {
     ...event,
     userId: input.userId,

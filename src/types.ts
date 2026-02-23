@@ -3,6 +3,8 @@ export type InteractionIntent =
   | 'task'
   | 'draft'
   | 'chat'
+  | 'email'
+  | 'calendar'
   | 'rollback'
   | 'introspection'
   | 'unknown';
@@ -45,7 +47,16 @@ export type FeedbackEventType =
   | 'thumbs_up'
   | 'thumbs_down'
   | 'implicit_engagement_timing'
-  | 'implicit_draft_acceptance';
+  | 'implicit_draft_acceptance'
+  | 'email_draft_generated'
+  | 'email_send_confirmed'
+  | 'email_send_canceled'
+  | 'email_send_failed'
+  | 'email_triage_accepted'
+  | 'email_snooze'
+  | 'email_marked_done'
+  | 'email_marked_no_reply'
+  | 'email_ignored_urgent';
 
 export interface FeedbackEvent {
   id: string;
@@ -67,6 +78,23 @@ export interface FeedbackEvent {
         implicitSignal: 'engagement_timing' | 'draft_acceptance';
         value: number;
         note?: string;
+      }
+    | {
+        emailAction: {
+          action: 'draft_generated' | 'send_confirmed' | 'send_canceled' | 'send_failed';
+          draftRef: string;
+          threadId?: string;
+          confirmationId?: string;
+          note?: string;
+        };
+      }
+    | {
+        triageAction: {
+          action: 'triage_accepted' | 'snooze' | 'marked_done' | 'marked_no_reply' | 'ignored_urgent';
+          threadId: string;
+          snoozedUntil?: string;
+          note?: string;
+        };
       };
 }
 

@@ -11,6 +11,30 @@ interface FeedbackSignalEntry {
   type?: string;
 }
 
+interface EmailActionEntry {
+  type?: string;
+  details?: {
+    emailAction?: {
+      action?: string;
+    };
+    triageAction?: {
+      action?: string;
+    };
+  };
+}
+
+interface EmailMetrics {
+  draftsGenerated: number;
+  sendConfirmed: number;
+  sendCanceled: number;
+  sendFailed: number;
+  triageAccepted: number;
+  snoozeCount: number;
+  markedDone: number;
+  markedNoReply: number;
+  ignoredUrgent: number;
+}
+
 interface ImplicitFeedbackEntry {
   type?: string;
   details?: {
@@ -28,6 +52,7 @@ interface NightlySummary {
   negativeSignals: number;
   skillUsage: Record<string, number>;
   averageEngagement: number | null;
+  emailMetrics: EmailMetrics;
   reflectionMarkdown: string;
   extractedPatterns: string[];
   autonomicAdjustments: AutonomicAdjustment[];
@@ -462,6 +487,7 @@ function buildNightlyPrompt(
   negativeSignals: number,
   skillUsage: Record<string, number>,
   averageEngagement: number | null,
+  emailMetrics: EmailMetrics,
 ): string {
   return [
     'You are generating a nightly reflection for an adaptive assistant.',
@@ -478,6 +504,14 @@ function buildNightlyPrompt(
     '',
     'Skill usage distribution:',
     summarizeSkillUsage(skillUsage),
+    '',
+    'Email triage metrics:',
+    `- Drafts generated: ${emailMetrics.draftsGenerated}`,
+    `- Sends confirmed: ${emailMetrics.sendConfirmed}`,
+    `- Sends canceled: ${emailMetrics.sendCanceled}`,
+    `- Snoozes: ${emailMetrics.snoozeCount}`,
+    `- Marked done: ${emailMetrics.markedDone}`,
+    `- Marked no-reply: ${emailMetrics.markedNoReply}`,
   ].join('\n');
 }
 
@@ -495,24 +529,48 @@ export async function generateNightlyReview(date = new Date()): Promise<NightlyS
     'interactions',
     `corrections-${dateStamp}.jsonl`,
   );
+  const emailActionsLogPath = path.join(
+    config.vault.feedbackDir,
+    'interactions',
+    `email-actions-${dateStamp}.jsonl`,
+  );
 
-  const [interactionsRaw, signalsRaw, implicitRaw, correctionsRaw] = await Promise.all([
+  const [interactionsRaw, signalsRaw, implicitRaw, correctionsRaw, emailActionsRaw] = await Promise.all([
     readFileIfExists(interactionLogPath),
     readFileIfExists(signalLogPath),
     readFileIfExists(implicitLogPath),
     readFileIfExists(correctionsLogPath),
+    readFileIfExists(emailActionsLogPath),
   ]);
 
   const interactions = parseJsonLines<Interaction>(interactionsRaw);
   const feedbackSignals = parseJsonLines<FeedbackSignalEntry>(signalsRaw);
   const implicitSignals = parseJsonLines<ImplicitFeedbackEntry>(implicitRaw);
   const corrections = parseJsonLines<{ id?: string }>(correctionsRaw);
+  const emailActions = parseJsonLines<EmailActionEntry>(emailActionsRaw);
 
   const totalInteractions = interactions.length;
   const correctionsLogged = corrections.length;
   const positiveSignals = feedbackSignals.filter((entry) => entry.type === 'thumbs_up').length;
   const negativeSignals = feedbackSignals.filter((entry) => entry.type === 'thumbs_down').length;
   const skillUsage = buildSkillUsage(interactions);
+  const countEmailType = (type: string): number =>
+    emailActions.filter((entry) => entry.type === type).length;
+  const countTriageAction = (action: string): number =>
+    emailActions.filter((entry) => entry.details?.triageAction?.action === action).length;
+
+  const emailMetrics: EmailMetrics = {
+    draftsGenerated: countEmailType('email_draft_generated'),
+    sendConfirmed: countEmailType('email_send_confirmed'),
+    sendCanceled: countEmailType('email_send_canceled'),
+    sendFailed: countEmailType('email_send_failed'),
+    triageAccepted: countTriageAction('triage_accepted'),
+    snoozeCount: countTriageAction('snooze'),
+    markedDone: countTriageAction('marked_done'),
+    markedNoReply: countTriageAction('marked_no_reply'),
+    ignoredUrgent: countTriageAction('ignored_urgent'),
+  };
+
   const engagementValues = implicitSignals
     .filter((entry) => entry.details?.implicitSignal === 'engagement_timing')
     .map((entry) => entry.details?.value)
@@ -527,6 +585,7 @@ export async function generateNightlyReview(date = new Date()): Promise<NightlyS
     negativeSignals,
     skillUsage,
     averageEngagement,
+    emailMetrics,
   );
   const completion = await complete(prompt, 'tier3');
   const parsedModel = completion.ok ? parseNightlyModel(completion.data.text) : null;
@@ -573,6 +632,7 @@ export async function generateNightlyReview(date = new Date()): Promise<NightlyS
     negativeSignals,
     skillUsage,
     averageEngagement,
+    emailMetrics,
     reflectionMarkdown,
     extractedPatterns,
     autonomicAdjustments: adjustments,

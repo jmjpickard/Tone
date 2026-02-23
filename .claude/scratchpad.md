@@ -1,48 +1,100 @@
 # Tone - Planning Scratchpad
 
-## What is Tone?
-Adaptive personal AI agent on Raspberry Pi. Telegram interface (voice + text). Obsidian vault as knowledge layer. Three feedback loops (immediate corrections, nightly review, weekly adaptation). Git-versioned skills that evolve per user.
+## Current Work: Finish EPIC-7, Start EPIC-8
 
-## Key Architectural Decisions
-- Two repos: public code (GitHub, MIT) + private vault (local git, personal data)
-- Skills = markdown definitions in vault + TypeScript implementations in code
-- LLM tiering via OpenRouter: Gemini Flash (routing/filing), Claude Sonnet (interactions), Claude Opus (self-improvement)
-- Deepgram for voice transcription
-- Interaction logs as JSONL (structured for aggregation), reviews/evolution as markdown (human-readable)
-- evolution.ts wraps simple-git for vault repo operations - critical dependency for all feedback loops
+### Status Assessment
 
-## Backlog Status
-- `docs/backlog.json` created with 5 epics, 19 tickets
-- Total estimate: ~39.5hrs
-- Dependency graph validated — no circular deps, all refs consistent
+**EPIC-7 (Email Triage & Reinforcement):**
+- TONE-046 ✅ Deterministic triage + scoring — complete
+- TONE-047 ✅ Reminder cadence + quick actions — complete
+- TONE-048 ✅ Reinforcement instrumentation — complete
+- TONE-049 ✅ Weekly adaptation tuning — complete
+- TONE-050 ⏭️ Hardening/release — deferred (docs/runbook)
 
-## Epic Breakdown
-1. **Foundation** (4 tickets, ~5.5hrs): Project init, vault template, scripts, types/config
-2. **Core Services** (4 tickets, ~7.5hrs): LLM client, transcriber, vault CRUD, Telegram bot
-3. **Interaction Pipeline** (4 tickets, ~10hrs): Router, skill loader + capture, task/draft/chat skills, feedback logger + wiring
-4. **Proactive Loops** (4 tickets, ~10hrs): Briefing, nightly review, evolution git module, weekly adaptation
-5. **Rollback & Introspection** (3 tickets, ~6.5hrs): Loop 1 corrections, rollback commands, introspection + evolution log
+**EPIC-8 (Google Calendar):**
+- TONE-051 ✅ Calendar onboarding + config — complete (CalendarConfig, onboard prompts, 'calendar' intent)
+- TONE-052 ✅ Calendar API client — complete (listUpcomingEvents, getEventDetails, getFreeBusy)
+- TONE-053 ✅ Calendar skill + routing — complete (today/week/meeting_prep actions, router heuristics)
+- TONE-054 ❌ Briefing synthesis — not started (integrate calendar into morning briefing)
+- TONE-055 ❌ Planning feedback — not started
 
-## Dependency Insights
-- evolution.ts (TONE-015) must exist before any loop can commit — pulled into EPIC-4
-- TONE-012 (feedback + wiring) is the integration ticket for the whole pipeline — depends on all services
-- TONE-016 (weekly loop) is the largest ticket (~3hrs) due to approval flow complexity
-- index.ts is touched by multiple tickets (TONE-008, TONE-012) — careful about merge conflicts
+### Implementation Plan
 
-## Implementation Order (9 phases)
-```
-Phase 1: TONE-001, TONE-002 (parallel, no deps)
-Phase 2: TONE-003 (needs 001+002), TONE-004 (needs 001)
-Phase 3: TONE-005, TONE-006, TONE-007, TONE-008, TONE-015 (all need 004, parallel)
-Phase 4: TONE-010 (needs 005+007)
-Phase 5: TONE-009 (needs 005+010), TONE-011 (needs 010)
-Phase 6: TONE-012 (needs 006+008+009+011) — integration ticket
-Phase 7: TONE-013, TONE-014, TONE-017, TONE-018 (need 012 and/or 015)
-Phase 8: TONE-016 (needs 014+015)
-Phase 9: TONE-019 (needs 015+016)
-```
+#### Phase A: TONE-047 — Midday/Evening Reminders + Quick Actions
 
-## Open Questions
-- TypeScript or JavaScript? Plan doc shows .js, user prefers TypeScript — going with .ts
-- Testing strategy? No tests in plan. Should add as we go.
-- Where does this run initially? Pi is target but dev likely happens locally first.
+**Files to modify:**
+- `src/loops/briefing.ts` — add `scheduleMidday()` and `scheduleEvening()` cron jobs
+- `src/skills/email.ts` — add snooze_4h, remind_tomorrow, mark_no_reply, done quick actions
+- `src/index.ts` — wire midday/evening crons, add email quick action callback handlers
+- `src/integrations/gmail/sync.ts` — update triage thread state for snooze/done
+
+**Approach:**
+- Midday cron (12:30): surfaces unresolved high-priority items from latest triage snapshot
+- Evening cron (20:00): lists carry-over items for next day
+- Quick actions via inline keyboard on triage items
+- Snooze updates `snoozedUntil` in triage state map
+- Done/no-reply updates `status` in triage state map
+
+#### Phase B: TONE-048 — Reinforcement Instrumentation
+
+**Files to modify:**
+- `src/types.ts` — add triage outcome feedback event types
+- `src/feedback.ts` — add `logTriageOutcome()` function
+- `src/loops/nightly.ts` — aggregate email-specific metrics in nightly review
+
+**New FeedbackEventTypes:**
+- `email_triage_accepted` — user acted on triage suggestion
+- `email_snooze` — user snoozed an item
+- `email_marked_done` — user marked item done
+- `email_marked_no_reply` — user marked no-reply
+- `email_ignored_urgent` — high-priority item went unacted for >24h
+
+#### Phase C: TONE-049 — Weekly Triage Tuning
+
+**Files to modify:**
+- `src/loops/weekly.ts` — add triage scorecard section, propose bounded weight changes
+- `src/integrations/gmail/triage.ts` — expose weight range constants for weekly loop
+
+**Approach:**
+- Weekly review reads email action JSONL for the week
+- Calculates: accuracy rate, false-positive rate, snooze frequency
+- Proposes ±10% weight changes within predefined bounds
+- Changes go through existing approval flow
+
+#### Phase D: TONE-051 — Calendar Onboarding
+
+**Files to modify:**
+- `.env.example` — add CALENDAR_ENABLED, CALENDAR_SCOPES, CALENDAR_SYNC_WINDOW_DAYS
+- `src/config.ts` — add CalendarConfig type, buildCalendarConfig(), validate
+- `src/onboard.ts` — add calendar prompts after Gmail section
+- `src/types.ts` — add 'calendar' to InteractionIntent
+
+#### Phase E: TONE-052 — Calendar API Client
+
+**New files:**
+- `src/integrations/calendar/types.ts` — CalendarEvent, FreeBusyWindow, CalendarError types
+- `src/integrations/calendar/client.ts` — listUpcomingEvents, getEventDetails, getFreeBusy
+
+**Approach:**
+- Reuse Gmail's BYO OAuth tokens (same Google project, add calendar scope)
+- Use googleapis or raw REST calls
+- Typed error mapping matching Gmail pattern
+- Retry/backoff for 429/5xx
+
+#### Phase F: TONE-053 — Calendar Skill + Routing
+
+**New files:**
+- `src/skills/calendar.ts` — today agenda, week preview, meeting prep
+
+**Files to modify:**
+- `src/router.ts` — add calendar/planning heuristics
+- `src/skills/index.ts` — register calendar skill
+- `src/types.ts` — add 'calendar' intent
+
+### Key Design Decisions
+
+1. **Calendar reuses Gmail OAuth** — same Google Cloud project, just add calendar scope. No separate token flow.
+2. **Midday/evening reminders** — lightweight crons that read existing triage snapshot, no new Gmail API calls.
+3. **Quick actions** — inline keyboard buttons on triage messages, callbacks in index.ts.
+4. **Weekly triage tuning** — bounded ±10% weight changes, never outside predefined min/max ranges already in triage.ts.
+5. **Calendar is read-only** — no event creation/deletion in v0.4.x.

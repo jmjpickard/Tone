@@ -12,11 +12,12 @@ import {
   logInteraction,
 } from './feedback.js';
 import { generateIntrospectionSummary } from './introspection.js';
-import { scheduleBriefing, trackBriefingEngagement } from './loops/briefing.js';
+import { scheduleBriefing, scheduleEveningRecap, scheduleMiddayReminder, trackBriefingEngagement } from './loops/briefing.js';
 import { scheduleNightly } from './loops/nightly.js';
 import { handleWeeklyApprovalDecision, scheduleWeekly } from './loops/weekly.js';
 import { cancelRollback, confirmRollback, handleRollbackRequest } from './rollback.js';
 import { route } from './router.js';
+import { cancelPendingEmailSend, confirmPendingEmailSend } from './skills/email.js';
 import { resolveSkill } from './skills/index.js';
 import { loadSkills } from './skills/loader.js';
 import type { SkillResult } from './skills/types.js';
@@ -237,9 +238,24 @@ async function processInteraction(
 
   const skillResponse = skillResult.response.trim() || 'I do not have a response yet.';
   const responseText = responsePrefix.length > 0 ? `${responsePrefix}\n${skillResponse}` : skillResponse;
+  const emailSendConfirmationId =
+    typeof skillResult.metadata?.emailSendConfirmationId === 'string'
+      ? skillResult.metadata.emailSendConfirmationId
+      : '';
 
   try {
-    await sendWithReactions(ctx, responseText, interactionId);
+    if (emailSendConfirmationId) {
+      await ctx.reply(responseText, {
+        reply_markup: Markup.inlineKeyboard([
+          [
+            Markup.button.callback('Confirm send', `email-send:confirm:${emailSendConfirmationId}`),
+            Markup.button.callback('Cancel', `email-send:cancel:${emailSendConfirmationId}`),
+          ],
+        ]).reply_markup,
+      });
+    } else {
+      await sendWithReactions(ctx, responseText, interactionId);
+    }
   } catch (error) {
     console.error('[tone] failed to send reply', error);
     await ctx.reply('I generated a response but could not send it with feedback controls.');
@@ -383,6 +399,32 @@ bot.on('callback_query', async (ctx) => {
     return;
   }
 
+  const emailSendMatch = callbackQuery.data.match(/^email-send:(confirm|cancel):([0-9a-f-]+)$/i);
+  if (emailSendMatch?.[1] && emailSendMatch[2]) {
+    const userId = String(ctx.from?.id ?? 'unknown');
+    try {
+      const outcome =
+        emailSendMatch[1].toLowerCase() === 'confirm'
+          ? await confirmPendingEmailSend(emailSendMatch[2], userId)
+          : await cancelPendingEmailSend(emailSendMatch[2], userId);
+      const callbackMessage =
+        outcome.status === 'sent'
+          ? 'Email sent.'
+          : outcome.status === 'canceled'
+            ? 'Send canceled.'
+            : outcome.status === 'failed'
+              ? 'Send failed.'
+              : 'Already handled.';
+      await ctx.answerCbQuery(callbackMessage);
+      await ctx.reply(outcome.message);
+    } catch (error) {
+      console.error('[tone] email send callback failed', error);
+      await ctx.answerCbQuery('Unable to process email send decision.');
+    }
+
+    return;
+  }
+
   const match = callbackQuery.data.match(/^feedback:(up|down):(.+)$/);
   if (!match?.[1] || !match[2]) {
     await ctx.answerCbQuery('Unknown action.');
@@ -419,6 +461,12 @@ async function launch(): Promise<void> {
   await bot.launch();
 
   scheduleBriefing({
+    bot,
+  });
+  scheduleMiddayReminder({
+    bot,
+  });
+  scheduleEveningRecap({
     bot,
   });
   scheduleNightly({

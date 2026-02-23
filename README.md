@@ -34,6 +34,7 @@ Keep personal data in the vault repo only.
 - Telegram bot token
 - OpenRouter API key
 - Optional for voice notes: Deepgram or Voxtral transcription provider
+- Optional for Gmail integration: your own Google OAuth app credentials (BYO OAuth)
 
 ## Environment
 
@@ -46,6 +47,15 @@ Run `tone onboard` to generate your env file automatically. If you want to set v
   - `TONE_TIMEZONE`
 - Recommended:
   - `TELEGRAM_DEFAULT_CHAT_ID` (needed for proactive loops to send messages)
+- Gmail (optional, BYO OAuth only):
+  - `GMAIL_ENABLED=false` (default)
+  - If enabled, set:
+    - `GMAIL_CLIENT_ID`
+    - `GMAIL_CLIENT_SECRET`
+    - `GMAIL_REDIRECT_URI`
+    - `GMAIL_TOKEN_PATH` (local path for token cache; outside git-tracked files)
+  - Each user must create and use their own Google OAuth app credentials.
+  - Tone does not ship or depend on a shared OAuth client.
 - Transcription:
   - `TRANSCRIPTION_PROVIDER=none` (text-only mode)
   - or `TRANSCRIPTION_PROVIDER=deepgram` and `DEEPGRAM_API_KEY`
@@ -136,6 +146,13 @@ If the app fails during startup with a missing environment variable error, updat
 - `VOXTRAL_ENDPOINT` (when `TRANSCRIPTION_PROVIDER=voxtral`)
 
 Also set `TELEGRAM_DEFAULT_CHAT_ID` if you want scheduled briefings/nightly/weekly messages to be delivered automatically.
+
+If `GMAIL_ENABLED=true`, ensure these are set correctly:
+
+- `GMAIL_CLIENT_ID`
+- `GMAIL_CLIENT_SECRET`
+- `GMAIL_REDIRECT_URI`
+- `GMAIL_TOKEN_PATH`
 
 If `tone start` exits quickly, run:
 

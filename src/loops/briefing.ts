@@ -4,6 +4,9 @@ import cron, { type ScheduledTask } from 'node-cron';
 import type { Context, Telegraf } from 'telegraf';
 import { config, type ResponseVerbosity } from '../config.js';
 import { logImplicitFeedback } from '../feedback.js';
+import { getConnectionStatus } from '../integrations/gmail/auth.js';
+import { loadLatestTriageSnapshot } from '../integrations/gmail/sync.js';
+import type { EmailTriageSnapshot } from '../integrations/gmail/types.js';
 import { complete } from '../llm.js';
 import { formatBriefing, type BriefingPayload } from '../utils/telegram.js';
 
@@ -13,6 +16,7 @@ interface BriefingContextSnapshot {
   recentDailyNotes: string[];
   personality: string;
   responseVerbosity: ResponseVerbosity;
+  emailSnapshot: EmailTriageSnapshot | null;
 }
 
 interface BriefingModelPayload {
@@ -178,14 +182,37 @@ async function readResponseVerbosity(): Promise<ResponseVerbosity> {
 }
 
 async function readBriefingContext(): Promise<BriefingContextSnapshot> {
-  const [pendingTasks, activeThreads, recentDailyNotes, personality, responseVerbosity] =
+  const [pendingTasks, activeThreads, recentDailyNotes, personality, responseVerbosity, emailSnapshot, gmailStatus] =
     await Promise.all([
       readPendingTasks(),
       readThreadActivity(),
       readRecentDailyNotes(),
       readFileIfExists(path.join(config.vault.configDir, 'personality.md')),
       readResponseVerbosity(),
+      loadLatestTriageSnapshot(),
+      getConnectionStatus(),
     ]);
+
+  const normalizedEmailSnapshot =
+    emailSnapshot ??
+    (gmailStatus.state === 'connected'
+      ? {
+          generatedAt: new Date().toISOString(),
+          source: 'fallback',
+          status: 'available',
+          needsReply: [],
+          waitingOnThem: [],
+          staleThreads: [],
+        }
+      : {
+          generatedAt: new Date().toISOString(),
+          source: 'fallback',
+          status: 'unavailable',
+          unavailableReason: gmailStatus.message,
+          needsReply: [],
+          waitingOnThem: [],
+          staleThreads: [],
+        });
 
   return {
     pendingTasks,
@@ -193,6 +220,67 @@ async function readBriefingContext(): Promise<BriefingContextSnapshot> {
     recentDailyNotes,
     personality: personality.trim(),
     responseVerbosity,
+    emailSnapshot: normalizedEmailSnapshot,
+  };
+}
+
+function formatEmailPromptSummary(emailSnapshot: EmailTriageSnapshot | null): string {
+  if (!emailSnapshot) {
+    return '(no triage snapshot available yet)';
+  }
+
+  if (emailSnapshot.status === 'unavailable') {
+    return `Email unavailable: ${emailSnapshot.unavailableReason ?? 'Unknown reason'}`;
+  }
+
+  const topNeedsReply =
+    emailSnapshot.needsReply.length > 0
+      ? emailSnapshot.needsReply.slice(0, 5).map((item) => `${item.subject} (${item.from})`).join('\n')
+      : '(none)';
+  const waitingOnThem =
+    emailSnapshot.waitingOnThem.length > 0
+      ? emailSnapshot.waitingOnThem
+          .slice(0, 4)
+          .map((item) => `${item.subject} (${item.from})`)
+          .join('\n')
+      : '(none)';
+  const staleThreads =
+    emailSnapshot.staleThreads.length > 0
+      ? emailSnapshot.staleThreads.slice(0, 4).map((item) => `${item.subject} (${item.from})`).join('\n')
+      : '(none)';
+
+  return [
+    'Needs reply:',
+    topNeedsReply,
+    '',
+    'Waiting on them:',
+    waitingOnThem,
+    '',
+    'Stale threads:',
+    staleThreads,
+  ].join('\n');
+}
+
+function toBriefingEmailSection(emailSnapshot: EmailTriageSnapshot | null): BriefingPayload['email'] | undefined {
+  if (!emailSnapshot) {
+    return undefined;
+  }
+
+  if (emailSnapshot.status === 'unavailable') {
+    return {
+      status: 'unavailable',
+      needsReply: [],
+      waitingOnThem: [],
+      staleThreads: [],
+      note: emailSnapshot.unavailableReason ?? 'Gmail is currently unavailable.',
+    };
+  }
+
+  return {
+    status: 'available',
+    needsReply: emailSnapshot.needsReply.slice(0, 5).map((item) => item.subject),
+    waitingOnThem: emailSnapshot.waitingOnThem.slice(0, 4).map((item) => item.subject),
+    staleThreads: emailSnapshot.staleThreads.slice(0, 4).map((item) => item.subject),
   };
 }
 
@@ -255,12 +343,14 @@ function fallbackPayload(snapshot: BriefingContextSnapshot): BriefingPayload {
   const prioritiesFromTasks = snapshot.pendingTasks.slice(0, 3);
   const prioritiesFromDaily = snapshot.recentDailyNotes.slice(0, 2);
   const priorities = prioritiesFromTasks.length > 0 ? prioritiesFromTasks : prioritiesFromDaily;
+  const emailSection = toBriefingEmailSection(snapshot.emailSnapshot);
 
   return {
     headline: 'Morning Briefing',
     priorities,
     activeThreads: snapshot.activeThreads.slice(0, 6),
     pendingTasks: snapshot.pendingTasks.slice(0, 8),
+    ...(emailSection ? { email: emailSection } : {}),
   };
 }
 
@@ -282,6 +372,8 @@ function buildBriefingPrompt(snapshot: BriefingContextSnapshot): string {
     `Recent daily notes:\n${snapshot.recentDailyNotes.length > 0 ? snapshot.recentDailyNotes.join('\n') : '(none)'}`,
     '',
     `Recent thread activity:\n${snapshot.activeThreads.length > 0 ? snapshot.activeThreads.join('\n') : '(none)'}`,
+    '',
+    `Latest email triage snapshot:\n${formatEmailPromptSummary(snapshot.emailSnapshot)}`,
   ].join('\n');
 }
 
@@ -380,13 +472,20 @@ export async function generateBriefing(): Promise<GeneratedBriefing> {
   const prompt = buildBriefingPrompt(contextSnapshot);
 
   const completion = await complete(prompt, 'tier2');
+  const emailSection = toBriefingEmailSection(contextSnapshot.emailSnapshot);
   if (completion.ok) {
     const parsed = parseModelPayload(completion.data.text);
     if (parsed) {
       return {
         generatedAt,
-        payload: parsed,
-        text: formatBriefing(parsed),
+        payload: {
+          ...parsed,
+          ...(emailSection ? { email: emailSection } : {}),
+        },
+        text: formatBriefing({
+          ...parsed,
+          ...(emailSection ? { email: emailSection } : {}),
+        }),
         source: 'llm',
       };
     }
@@ -413,6 +512,110 @@ async function runBriefing(options: ScheduleBriefingOptions): Promise<void> {
     parse_mode: 'Markdown',
   });
   await recordBriefingDispatch(chatId, briefing.generatedAt);
+}
+
+async function runMiddayReminder(options: ScheduleBriefingOptions): Promise<void> {
+  const chatId = resolveChatId(options.chatId);
+  if (!chatId) {
+    return;
+  }
+
+  const emailSnapshot = await loadLatestTriageSnapshot();
+  if (!emailSnapshot || emailSnapshot.status !== 'available') {
+    return;
+  }
+
+  const unresolvedHighPriority = emailSnapshot.needsReply.filter((item) => item.priorityScore >= 5);
+  if (unresolvedHighPriority.length === 0) {
+    return;
+  }
+
+  const lines = [
+    '*Midday Email Reminder*',
+    '',
+    `${unresolvedHighPriority.length} high-priority thread(s) still need a reply:`,
+    ...unresolvedHighPriority.slice(0, 5).map((item) => `- ${item.subject} (${item.from})`),
+    '',
+    'Quick actions: snooze, remind tomorrow, mark done, or draft a reply.',
+  ];
+
+  await options.bot.telegram.sendMessage(chatId, lines.join('\n'), { parse_mode: 'Markdown' });
+}
+
+async function runEveningRecap(options: ScheduleBriefingOptions): Promise<void> {
+  const chatId = resolveChatId(options.chatId);
+  if (!chatId) {
+    return;
+  }
+
+  const emailSnapshot = await loadLatestTriageSnapshot();
+  const pendingTasks = await readPendingTasks();
+
+  const carryOverEmails = emailSnapshot?.status === 'available'
+    ? emailSnapshot.needsReply.slice(0, 5)
+    : [];
+  const carryOverTasks = pendingTasks.slice(0, 5);
+
+  if (carryOverEmails.length === 0 && carryOverTasks.length === 0) {
+    return;
+  }
+
+  const lines = ['*Evening Recap*', ''];
+
+  if (carryOverEmails.length > 0) {
+    lines.push(
+      '*Email carry-over for tomorrow:*',
+      ...carryOverEmails.map((item) => `- ${item.subject} (${item.from})`),
+      '',
+    );
+  }
+
+  if (carryOverTasks.length > 0) {
+    lines.push(
+      '*Task carry-over:*',
+      ...carryOverTasks.map((task) => `- ${task}`),
+    );
+  }
+
+  await options.bot.telegram.sendMessage(chatId, lines.join('\n'), { parse_mode: 'Markdown' });
+}
+
+export function scheduleMiddayReminder(options: ScheduleBriefingOptions): ScheduledTask | null {
+  const chatId = resolveChatId(options.chatId);
+  if (!chatId) {
+    return null;
+  }
+
+  return cron.schedule(
+    config.loops.middayCron,
+    async () => {
+      try {
+        await runMiddayReminder({ ...options, chatId });
+      } catch (error) {
+        console.error('[tone] midday reminder failed', error);
+      }
+    },
+    { timezone: config.timezone },
+  );
+}
+
+export function scheduleEveningRecap(options: ScheduleBriefingOptions): ScheduledTask | null {
+  const chatId = resolveChatId(options.chatId);
+  if (!chatId) {
+    return null;
+  }
+
+  return cron.schedule(
+    config.loops.eveningCron,
+    async () => {
+      try {
+        await runEveningRecap({ ...options, chatId });
+      } catch (error) {
+        console.error('[tone] evening recap failed', error);
+      }
+    },
+    { timezone: config.timezone },
+  );
 }
 
 export function scheduleBriefing(options: ScheduleBriefingOptions): ScheduledTask | null {

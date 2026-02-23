@@ -14,8 +14,36 @@ import {
   mergeBranch,
   tag,
 } from '../evolution.js';
+import { loadTriageWeightsWithBounds, type TriageWeightBounds } from '../integrations/gmail/triage.js';
 import { complete } from '../llm.js';
 import type { Interaction } from '../types.js';
+
+interface EmailActionEntry {
+  type?: string;
+  details?: {
+    triageAction?: {
+      action?: string;
+    };
+  };
+}
+
+interface TriageScorecard {
+  draftsGenerated: number;
+  sendConfirmed: number;
+  sendCanceled: number;
+  snoozeCount: number;
+  markedDone: number;
+  markedNoReply: number;
+  ignoredUrgent: number;
+  totalActions: number;
+}
+
+interface TriageWeightProposal {
+  key: string;
+  currentValue: number;
+  proposedValue: number;
+  reason: string;
+}
 
 interface WeeklyModelPayload {
   summary?: unknown;
@@ -48,6 +76,8 @@ interface WeeklyReviewResult {
   negativeSignals: number;
   skillUsage: Record<string, number>;
   proposal: WeeklyProposal;
+  triageScorecard: TriageScorecard;
+  triageWeightProposals: TriageWeightProposal[];
   commitHash: string;
 }
 
@@ -346,6 +376,8 @@ function renderWeeklyProposalMarkdown(
   proposal: WeeklyProposal,
   branchName: string,
   weekTag: string,
+  triageScorecard: TriageScorecard,
+  triageWeightProposals: TriageWeightProposal[],
 ): string {
   const dailyReviewBlock =
     dailyReviewExcerpts.length > 0 ? dailyReviewExcerpts.map((line) => `- ${line}`).join('\n') : '- None';
@@ -382,6 +414,23 @@ function renderWeeklyProposalMarkdown(
     '',
     '## Summary',
     proposal.summary,
+    '',
+    '## Email Triage Scorecard',
+    `- Drafts generated: ${triageScorecard.draftsGenerated}`,
+    `- Sends confirmed: ${triageScorecard.sendConfirmed}`,
+    `- Sends canceled: ${triageScorecard.sendCanceled}`,
+    `- Snoozes: ${triageScorecard.snoozeCount}`,
+    `- Marked done: ${triageScorecard.markedDone}`,
+    `- Marked no-reply: ${triageScorecard.markedNoReply}`,
+    `- Ignored urgent: ${triageScorecard.ignoredUrgent}`,
+    `- Total actions: ${triageScorecard.totalActions}`,
+    '',
+    '## Proposed Triage Weight Changes',
+    triageWeightProposals.length > 0
+      ? triageWeightProposals
+          .map((p) => `- ${p.key}: ${p.currentValue} -> ${p.proposedValue} (${p.reason})`)
+          .join('\n')
+      : '- None proposed.',
     '',
     '## Approval',
     `- Status: pending`,
@@ -485,6 +534,78 @@ async function appendDecisionToProposal(
   await fs.writeFile(absoluteProposalPath, `${existing.trimEnd()}\n${section}\n`, 'utf8');
 }
 
+function clampToRange(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(value * 100) / 100));
+}
+
+async function deriveTriageWeightProposals(scorecard: TriageScorecard): Promise<TriageWeightProposal[]> {
+  const proposals: TriageWeightProposal[] = [];
+
+  let weights: TriageWeightBounds[];
+  try {
+    weights = await loadTriageWeightsWithBounds();
+  } catch {
+    return proposals;
+  }
+
+  if (scorecard.totalActions < 5) {
+    return proposals;
+  }
+
+  const snoozeRate = scorecard.snoozeCount / scorecard.totalActions;
+  const noReplyRate = scorecard.markedNoReply / scorecard.totalActions;
+
+  if (snoozeRate > 0.3) {
+    const deadlineWeight = weights.find((w) => w.key === 'deadlineLanguage');
+    if (deadlineWeight) {
+      const delta = deadlineWeight.current * 0.1;
+      const proposed = clampToRange(deadlineWeight.current - delta, deadlineWeight.min, deadlineWeight.max);
+      if (proposed !== deadlineWeight.current) {
+        proposals.push({
+          key: 'deadlineLanguage',
+          currentValue: deadlineWeight.current,
+          proposedValue: proposed,
+          reason: `High snooze rate (${(snoozeRate * 100).toFixed(0)}%) suggests deadline scoring is too aggressive.`,
+        });
+      }
+    }
+  }
+
+  if (noReplyRate > 0.25) {
+    const needsReplyThreshold = weights.find((w) => w.key === 'senderImportance');
+    if (needsReplyThreshold) {
+      const delta = needsReplyThreshold.current * 0.1;
+      const proposed = clampToRange(needsReplyThreshold.current - delta, needsReplyThreshold.min, needsReplyThreshold.max);
+      if (proposed !== needsReplyThreshold.current) {
+        proposals.push({
+          key: 'senderImportance',
+          currentValue: needsReplyThreshold.current,
+          proposedValue: proposed,
+          reason: `High no-reply rate (${(noReplyRate * 100).toFixed(0)}%) suggests sender importance is over-weighted.`,
+        });
+      }
+    }
+  }
+
+  if (scorecard.ignoredUrgent > 0 && scorecard.totalActions > 10) {
+    const questionWeight = weights.find((w) => w.key === 'directQuestion');
+    if (questionWeight) {
+      const delta = questionWeight.current * 0.1;
+      const proposed = clampToRange(questionWeight.current + delta, questionWeight.min, questionWeight.max);
+      if (proposed !== questionWeight.current) {
+        proposals.push({
+          key: 'directQuestion',
+          currentValue: questionWeight.current,
+          proposedValue: proposed,
+          reason: `${scorecard.ignoredUrgent} urgent thread(s) were ignored; increase direct question weight.`,
+        });
+      }
+    }
+  }
+
+  return proposals;
+}
+
 export async function generateWeeklyReview(referenceDate = new Date()): Promise<WeeklyReviewResult> {
   const weekInfo = getIsoWeekInfo(referenceDate);
   const dayStamps = datesForPastDays(7, referenceDate);
@@ -529,6 +650,36 @@ export async function generateWeeklyReview(referenceDate = new Date()): Promise<
     .filter((item) => item.length > 0)
     .slice(-7);
 
+  const emailActionLogs = await Promise.all(
+    dayStamps.map((dateStamp) =>
+      readFileIfExists(path.join(config.vault.feedbackDir, 'interactions', `email-actions-${dateStamp}.jsonl`)),
+    ),
+  );
+  const emailActions = emailActionLogs.flatMap((raw) => parseJsonLines<EmailActionEntry>(raw));
+
+  const countType = (type: string): number =>
+    emailActions.filter((entry) => entry.type === type).length;
+  const countTriageAction = (action: string): number =>
+    emailActions.filter((entry) => entry.details?.triageAction?.action === action).length;
+
+  const triageScorecard: TriageScorecard = {
+    draftsGenerated: countType('email_draft_generated'),
+    sendConfirmed: countType('email_send_confirmed'),
+    sendCanceled: countType('email_send_canceled'),
+    snoozeCount: countTriageAction('snooze'),
+    markedDone: countTriageAction('marked_done'),
+    markedNoReply: countTriageAction('marked_no_reply'),
+    ignoredUrgent: countTriageAction('ignored_urgent'),
+    totalActions:
+      countType('email_draft_generated') +
+      countType('email_send_confirmed') +
+      countTriageAction('snooze') +
+      countTriageAction('marked_done') +
+      countTriageAction('marked_no_reply'),
+  };
+
+  const triageWeightProposals = await deriveTriageWeightProposals(triageScorecard);
+
   const prompt = buildWeeklyPrompt(
     weekInfo.weekKey,
     totalInteractions,
@@ -566,6 +717,8 @@ export async function generateWeeklyReview(referenceDate = new Date()): Promise<
     proposal,
     weekInfo.branchName,
     weekInfo.weekTag,
+    triageScorecard,
+    triageWeightProposals,
   );
 
   const defaultBranch = await getDefaultBranch();
@@ -597,6 +750,8 @@ export async function generateWeeklyReview(referenceDate = new Date()): Promise<
     negativeSignals,
     skillUsage,
     proposal,
+    triageScorecard,
+    triageWeightProposals,
     commitHash: branchCommit.hash,
   };
 }

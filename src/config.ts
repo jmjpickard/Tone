@@ -1,7 +1,7 @@
 import { config as loadDotEnv } from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveToneEnvPath } from './paths.js';
+import { resolveToneEnvPath, resolveToneHomePath } from './paths.js';
 import type { LLMTier, VaultConfig } from './types.js';
 
 const toneEnvPath = resolveToneEnvPath();
@@ -14,6 +14,26 @@ if (localEnvPath !== toneEnvPath && fs.existsSync(localEnvPath)) {
 
 type TranscriptionProviderKind = 'none' | 'deepgram' | 'voxtral';
 type ResponseVerbosity = 'concise' | 'balanced' | 'detailed';
+type GmailConfig =
+  | {
+      enabled: false;
+    }
+  | {
+      enabled: true;
+      clientId: string;
+      clientSecret: string;
+      redirectUri: string;
+      tokenPath: string;
+    };
+
+type CalendarConfig =
+  | {
+      enabled: false;
+    }
+  | {
+      enabled: true;
+      syncWindowDays: number;
+    };
 
 interface AppConfig {
   telegramBotToken: string;
@@ -27,6 +47,8 @@ interface AppConfig {
   };
   loops: {
     briefingCron: string;
+    middayCron: string;
+    eveningCron: string;
     nightlyCron: string;
     weeklyCron: string;
     defaultResponseVerbosity: ResponseVerbosity;
@@ -50,6 +72,8 @@ interface AppConfig {
     voxtralEndpoint?: string;
     voxtralApiKey?: string;
   };
+  gmail: GmailConfig;
+  calendar: CalendarConfig;
 }
 
 function requiredEnv(name: string): string {
@@ -60,6 +84,14 @@ function requiredEnv(name: string): string {
       OPENROUTER_API_KEY: 'Set your OpenRouter API key (https://openrouter.ai/keys).',
       DEEPGRAM_API_KEY: 'Set your Deepgram API key when TRANSCRIPTION_PROVIDER=deepgram.',
       VOXTRAL_ENDPOINT: 'Set your Voxtral transcription endpoint when TRANSCRIPTION_PROVIDER=voxtral.',
+      GMAIL_CLIENT_ID:
+        'Set your Google OAuth client ID when GMAIL_ENABLED=true (BYO OAuth app per user).',
+      GMAIL_CLIENT_SECRET:
+        'Set your Google OAuth client secret when GMAIL_ENABLED=true (BYO OAuth app per user).',
+      GMAIL_REDIRECT_URI:
+        'Set your Google OAuth redirect URI when GMAIL_ENABLED=true (for example http://localhost:8085/oauth2/callback).',
+      GMAIL_TOKEN_PATH:
+        'Set the local token file path when GMAIL_ENABLED=true (outside git-tracked files).',
       VAULT_PATH: 'Set an absolute path where the Tone vault should live.',
       TONE_TIMEZONE: 'Set an IANA timezone, for example Europe/London.',
     };
@@ -131,7 +163,7 @@ function parseConfidenceThreshold(rawValue: string | undefined): number {
 }
 
 function parseCronExpression(
-  envName: 'BRIEFING_CRON' | 'NIGHTLY_CRON' | 'WEEKLY_CRON',
+  envName: 'BRIEFING_CRON' | 'MIDDAY_CRON' | 'EVENING_CRON' | 'NIGHTLY_CRON' | 'WEEKLY_CRON',
   fallback: string,
 ): string {
   const rawValue = optionalEnv(envName);
@@ -157,6 +189,26 @@ function parseResponseVerbosity(rawValue: string | undefined): ResponseVerbosity
 
   throw new Error(
     `Invalid DEFAULT_RESPONSE_VERBOSITY: \"${normalized}\". Expected \"concise\", \"balanced\", or \"detailed\".`,
+  );
+}
+
+function parseBooleanEnv(name: string, defaultValue: boolean): boolean {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue.trim() === '') {
+    return defaultValue;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y') {
+    return true;
+  }
+
+  if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'n') {
+    return false;
+  }
+
+  throw new Error(
+    `Invalid ${name}: "${rawValue}". Expected true/false (or 1/0, yes/no).`,
   );
 }
 
@@ -209,12 +261,58 @@ function buildTranscriptionConfig(provider: TranscriptionProviderKind): AppConfi
   };
 }
 
+function buildGmailConfig(): GmailConfig {
+  const enabled = parseBooleanEnv('GMAIL_ENABLED', false);
+  if (!enabled) {
+    return {
+      enabled: false,
+    };
+  }
+
+  const clientId = requiredEnv('GMAIL_CLIENT_ID');
+  const clientSecret = requiredEnv('GMAIL_CLIENT_SECRET');
+  const redirectUri = requiredEnv('GMAIL_REDIRECT_URI');
+  const tokenPath = path.resolve(
+    optionalEnv('GMAIL_TOKEN_PATH') ?? path.join(resolveToneHomePath(), 'gmail-token.json'),
+  );
+
+  return {
+    enabled: true,
+    clientId,
+    clientSecret,
+    redirectUri,
+    tokenPath,
+  };
+}
+
+function buildCalendarConfig(): CalendarConfig {
+  const enabled = parseBooleanEnv('CALENDAR_ENABLED', false);
+  if (!enabled) {
+    return { enabled: false };
+  }
+
+  const rawSyncWindow = optionalEnv('CALENDAR_SYNC_WINDOW_DAYS');
+  const syncWindowDays = rawSyncWindow ? Number(rawSyncWindow) : 7;
+  if (!Number.isFinite(syncWindowDays) || syncWindowDays < 1 || syncWindowDays > 30) {
+    throw new Error(
+      `Invalid CALENDAR_SYNC_WINDOW_DAYS: "${rawSyncWindow}". Expected 1-30.`,
+    );
+  }
+
+  return {
+    enabled: true,
+    syncWindowDays,
+  };
+}
+
 const timezone = validateTimezone(requiredEnv('TONE_TIMEZONE'));
 const vaultRoot = validateVaultPath(requiredEnv('VAULT_PATH'));
 const transcriptionProvider = validateTranscriptionProvider(process.env.TRANSCRIPTION_PROVIDER);
 const routerConfidenceThreshold = parseConfidenceThreshold(process.env.ROUTER_CONFIDENCE_THRESHOLD);
 const defaultChatId = optionalEnv('TELEGRAM_DEFAULT_CHAT_ID');
 const briefingCron = parseCronExpression('BRIEFING_CRON', '30 7 * * *');
+const middayCron = parseCronExpression('MIDDAY_CRON', '30 12 * * *');
+const eveningCron = parseCronExpression('EVENING_CRON', '0 20 * * *');
 const nightlyCron = parseCronExpression('NIGHTLY_CRON', '0 23 * * *');
 const weeklyCron = parseCronExpression('WEEKLY_CRON', '0 15 * * 5');
 const defaultResponseVerbosity = parseResponseVerbosity(process.env.DEFAULT_RESPONSE_VERBOSITY);
@@ -231,6 +329,8 @@ export const config: AppConfig = {
   },
   loops: {
     briefingCron,
+    middayCron,
+    eveningCron,
     nightlyCron,
     weeklyCron,
     defaultResponseVerbosity,
@@ -262,6 +362,8 @@ export const config: AppConfig = {
     },
   },
   transcription: buildTranscriptionConfig(transcriptionProvider),
+  gmail: buildGmailConfig(),
+  calendar: buildCalendarConfig(),
 };
 
-export type { AppConfig, ResponseVerbosity, TranscriptionProviderKind };
+export type { AppConfig, CalendarConfig, GmailConfig, ResponseVerbosity, TranscriptionProviderKind };

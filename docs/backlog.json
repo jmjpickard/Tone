@@ -1,7 +1,7 @@
 {
   "project": "tone",
-  "version": "0.1.0-0.2.0",
-  "description": "Adaptive personal AI agent — Telegram interface, Obsidian vault, OpenRouter LLM, pluggable transcription (Deepgram default, Voxtral self-hosted future). Build plan covering foundation through evolutionary feedback loops.",
+  "version": "0.1.0-0.4.1",
+  "description": "Adaptive personal AI agent — Telegram interface, Obsidian vault, OpenRouter LLM, pluggable transcription (Deepgram default, Voxtral self-hosted future), plus Gmail + Google Calendar BYO OAuth integration with deterministic triage/planning reinforcement workflows through v0.4.1.",
   "epics": [
     {
       "id": "EPIC-1",
@@ -29,7 +29,10 @@
           ],
           "dependencies": [],
           "estimateHours": 1,
-          "tags": ["foundation", "tooling"]
+          "tags": [
+            "foundation",
+            "tooling"
+          ]
         },
         {
           "id": "TONE-002",
@@ -75,7 +78,10 @@
           ],
           "dependencies": [],
           "estimateHours": 1.5,
-          "tags": ["foundation", "vault"]
+          "tags": [
+            "foundation",
+            "vault"
+          ]
         },
         {
           "id": "TONE-003",
@@ -95,9 +101,15 @@
             "scripts/init-vault.sh",
             "scripts/service.sh"
           ],
-          "dependencies": ["TONE-001", "TONE-002"],
+          "dependencies": [
+            "TONE-001",
+            "TONE-002"
+          ],
           "estimateHours": 1.5,
-          "tags": ["foundation", "devops"]
+          "tags": [
+            "foundation",
+            "devops"
+          ]
         },
         {
           "id": "TONE-004",
@@ -117,9 +129,14 @@
             "src/types.ts",
             "src/config.ts"
           ],
-          "dependencies": ["TONE-001"],
+          "dependencies": [
+            "TONE-001"
+          ],
           "estimateHours": 1.5,
-          "tags": ["foundation", "types"]
+          "tags": [
+            "foundation",
+            "types"
+          ]
         }
       ]
     },
@@ -145,9 +162,14 @@
           "files": [
             "src/llm.ts"
           ],
-          "dependencies": ["TONE-004"],
+          "dependencies": [
+            "TONE-004"
+          ],
           "estimateHours": 2,
-          "tags": ["core", "llm"]
+          "tags": [
+            "core",
+            "llm"
+          ]
         },
         {
           "id": "TONE-006",
@@ -169,9 +191,15 @@
           "files": [
             "src/transcriber.ts"
           ],
-          "dependencies": ["TONE-004"],
+          "dependencies": [
+            "TONE-004"
+          ],
           "estimateHours": 2,
-          "tags": ["core", "voice", "transcription"]
+          "tags": [
+            "core",
+            "voice",
+            "transcription"
+          ]
         },
         {
           "id": "TONE-007",
@@ -192,9 +220,14 @@
           "files": [
             "src/vault.ts"
           ],
-          "dependencies": ["TONE-004"],
+          "dependencies": [
+            "TONE-004"
+          ],
           "estimateHours": 2,
-          "tags": ["core", "vault"]
+          "tags": [
+            "core",
+            "vault"
+          ]
         },
         {
           "id": "TONE-008",
@@ -215,9 +248,14 @@
             "src/index.ts",
             "src/utils/telegram.ts"
           ],
-          "dependencies": ["TONE-004"],
+          "dependencies": [
+            "TONE-004"
+          ],
           "estimateHours": 2,
-          "tags": ["core", "telegram"]
+          "tags": [
+            "core",
+            "telegram"
+          ]
         }
       ]
     },
@@ -243,9 +281,15 @@
           "files": [
             "src/router.ts"
           ],
-          "dependencies": ["TONE-005", "TONE-010"],
+          "dependencies": [
+            "TONE-005",
+            "TONE-010"
+          ],
           "estimateHours": 2,
-          "tags": ["pipeline", "routing"]
+          "tags": [
+            "pipeline",
+            "routing"
+          ]
         },
         {
           "id": "TONE-010",
@@ -267,9 +311,15 @@
             "src/skills/loader.ts",
             "src/skills/capture.ts"
           ],
-          "dependencies": ["TONE-005", "TONE-007"],
+          "dependencies": [
+            "TONE-005",
+            "TONE-007"
+          ],
           "estimateHours": 2.5,
-          "tags": ["pipeline", "skills"]
+          "tags": [
+            "pipeline",
+            "skills"
+          ]
         },
         {
           "id": "TONE-011",
@@ -291,9 +341,14 @@
             "src/skills/draft.ts",
             "src/skills/chat.ts"
           ],
-          "dependencies": ["TONE-010"],
+          "dependencies": [
+            "TONE-010"
+          ],
           "estimateHours": 3,
-          "tags": ["pipeline", "skills"]
+          "tags": [
+            "pipeline",
+            "skills"
+          ]
         },
         {
           "id": "TONE-012",
@@ -315,9 +370,17 @@
             "src/feedback.ts",
             "src/index.ts"
           ],
-          "dependencies": ["TONE-006", "TONE-008", "TONE-009", "TONE-011"],
+          "dependencies": [
+            "TONE-006",
+            "TONE-008",
+            "TONE-009",
+            "TONE-011"
+          ],
           "estimateHours": 2.5,
-          "tags": ["pipeline", "integration"]
+          "tags": [
+            "pipeline",
+            "integration"
+          ]
         }
       ]
     },
@@ -344,9 +407,14 @@
           "files": [
             "src/loops/briefing.ts"
           ],
-          "dependencies": ["TONE-012"],
+          "dependencies": [
+            "TONE-012"
+          ],
           "estimateHours": 2,
-          "tags": ["loops", "briefing"]
+          "tags": [
+            "loops",
+            "briefing"
+          ]
         },
         {
           "id": "TONE-014",
@@ -368,9 +436,15 @@
           "files": [
             "src/loops/nightly.ts"
           ],
-          "dependencies": ["TONE-012", "TONE-015"],
+          "dependencies": [
+            "TONE-012",
+            "TONE-015"
+          ],
           "estimateHours": 3,
-          "tags": ["loops", "feedback"]
+          "tags": [
+            "loops",
+            "feedback"
+          ]
         },
         {
           "id": "TONE-015",
@@ -392,9 +466,14 @@
           "files": [
             "src/evolution.ts"
           ],
-          "dependencies": ["TONE-004"],
+          "dependencies": [
+            "TONE-004"
+          ],
           "estimateHours": 2,
-          "tags": ["evolution", "git"]
+          "tags": [
+            "evolution",
+            "git"
+          ]
         },
         {
           "id": "TONE-016",
@@ -417,9 +496,15 @@
           "files": [
             "src/loops/weekly.ts"
           ],
-          "dependencies": ["TONE-014", "TONE-015"],
+          "dependencies": [
+            "TONE-014",
+            "TONE-015"
+          ],
           "estimateHours": 3,
-          "tags": ["loops", "adaptation"]
+          "tags": [
+            "loops",
+            "adaptation"
+          ]
         }
       ]
     },
@@ -445,9 +530,15 @@
           "files": [
             "src/feedback.ts"
           ],
-          "dependencies": ["TONE-012", "TONE-015"],
+          "dependencies": [
+            "TONE-012",
+            "TONE-015"
+          ],
           "estimateHours": 2,
-          "tags": ["feedback", "corrections"]
+          "tags": [
+            "feedback",
+            "corrections"
+          ]
         },
         {
           "id": "TONE-018",
@@ -469,9 +560,15 @@
             "src/evolution.ts",
             "src/router.ts"
           ],
-          "dependencies": ["TONE-012", "TONE-015"],
+          "dependencies": [
+            "TONE-012",
+            "TONE-015"
+          ],
           "estimateHours": 2.5,
-          "tags": ["evolution", "rollback"]
+          "tags": [
+            "evolution",
+            "rollback"
+          ]
         },
         {
           "id": "TONE-019",
@@ -491,9 +588,501 @@
             "src/evolution.ts",
             "src/loops/weekly.ts"
           ],
-          "dependencies": ["TONE-015", "TONE-016"],
+          "dependencies": [
+            "TONE-015",
+            "TONE-016"
+          ],
           "estimateHours": 2,
-          "tags": ["evolution", "introspection"]
+          "tags": [
+            "evolution",
+            "introspection"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-6",
+      "title": "Gmail BYO OAuth Integration",
+      "description": "Integrate Gmail using a BYO OAuth model only. Each user configures their own Google OAuth app credentials locally, then Tone can summarize inbox, draft replies, and send only with explicit confirmation.",
+      "tickets": [
+        {
+          "id": "TONE-040",
+          "epicId": "EPIC-6",
+          "title": "BYO Gmail OAuth onboarding and config surface",
+          "description": "Add Gmail configuration and onboarding for per-user OAuth credentials. No shared platform OAuth client is used. Tone must continue working when Gmail is not configured.",
+          "acceptanceCriteria": [
+            ".env.example includes Gmail vars: GMAIL_ENABLED, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REDIRECT_URI, GMAIL_TOKEN_PATH",
+            "src/config.ts validates Gmail vars only when GMAIL_ENABLED=true",
+            "src/onboard.ts prompts for optional Gmail setup and stores values in local env file",
+            "README documents BYO OAuth setup and explicitly states each user creates their own Google OAuth app",
+            "App starts normally with Gmail disabled",
+            "typecheck passes"
+          ],
+          "files": [
+            ".env.example",
+            "src/config.ts",
+            "src/onboard.ts",
+            "README.md"
+          ],
+          "dependencies": [],
+          "estimateHours": 2,
+          "tags": [
+            "gmail",
+            "auth",
+            "onboarding"
+          ]
+        },
+        {
+          "id": "TONE-041",
+          "epicId": "EPIC-6",
+          "title": "Gmail auth and token lifecycle service",
+          "description": "Build Gmail OAuth token handling service: generate auth URL, exchange authorization code, refresh tokens, and expose connection status with typed errors.",
+          "acceptanceCriteria": [
+            "src/integrations/gmail/auth.ts exports methods for startAuth, exchangeCode, refreshAccessToken, getConnectionStatus",
+            "Access token refresh occurs automatically before API calls when expired",
+            "Token file is stored outside git-tracked project files (default under Tone home path)",
+            "Token storage permissions are restrictive (user-readable only)",
+            "Typed errors include invalid_grant, missing_credentials, refresh_failed, and disconnected states",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/integrations/gmail/auth.ts",
+            "src/integrations/gmail/types.ts",
+            "src/paths.ts"
+          ],
+          "dependencies": [
+            "TONE-040"
+          ],
+          "estimateHours": 3,
+          "tags": [
+            "gmail",
+            "auth",
+            "security"
+          ]
+        },
+        {
+          "id": "TONE-042",
+          "epicId": "EPIC-6",
+          "title": "Gmail API client for inbox, threads, drafts, and send",
+          "description": "Implement a Gmail client wrapper with typed request/response models for inbox retrieval, thread detail retrieval, draft creation, and reply sending.",
+          "acceptanceCriteria": [
+            "src/integrations/gmail/client.ts exports listInbox, getThread, createReplyDraft, sendReply",
+            "Supports pagination when listing inbox messages",
+            "Maps Google API errors to typed application errors for user-safe messaging",
+            "Implements retry/backoff for transient 429/5xx responses",
+            "Respects least-privilege scopes required for read/draft/send flow",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/integrations/gmail/client.ts",
+            "src/integrations/gmail/types.ts"
+          ],
+          "dependencies": [
+            "TONE-041"
+          ],
+          "estimateHours": 3,
+          "tags": [
+            "gmail",
+            "integration",
+            "api"
+          ]
+        },
+        {
+          "id": "TONE-043",
+          "epicId": "EPIC-6",
+          "title": "Email skill and router wiring for triage + draft",
+          "description": "Add an email skill and route email intents to it so users can request inbox triage and draft replies from Telegram.",
+          "acceptanceCriteria": [
+            "Router recognizes email-related requests and maps them to email handling intent/entities",
+            "src/skills/email.ts supports inbox summary and draft generation for selected message/thread",
+            "Email skill uses Gmail client and degrades gracefully when Gmail is disconnected",
+            "Skill output includes stable reference needed for later send confirmation",
+            "Skill is registered in src/skills/index.ts and invoked by the main pipeline",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/router.ts",
+            "src/types.ts",
+            "src/skills/email.ts",
+            "src/skills/index.ts"
+          ],
+          "dependencies": [
+            "TONE-042",
+            "TONE-010"
+          ],
+          "estimateHours": 3,
+          "tags": [
+            "gmail",
+            "skills",
+            "routing"
+          ]
+        },
+        {
+          "id": "TONE-044",
+          "epicId": "EPIC-6",
+          "title": "Email send confirmation callbacks in Telegram",
+          "description": "Implement explicit confirm/cancel callbacks for email sending. Sending a draft must always require user confirmation via Telegram inline controls.",
+          "acceptanceCriteria": [
+            "Email send requires explicit callback confirmation before any Gmail send API call",
+            "Cancel path leaves the draft persisted and records cancellation reason/context",
+            "Duplicate callback events are idempotent and do not send multiple emails",
+            "Success/failure/cancel outcomes are logged through feedback pipeline",
+            "User sees clear Telegram confirmation status messages",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/index.ts",
+            "src/skills/email.ts",
+            "src/feedback.ts"
+          ],
+          "dependencies": [
+            "TONE-043",
+            "TONE-008"
+          ],
+          "estimateHours": 2.5,
+          "tags": [
+            "gmail",
+            "telegram",
+            "safety"
+          ]
+        },
+        {
+          "id": "TONE-045",
+          "epicId": "EPIC-6",
+          "title": "Vault email sync and briefing integration",
+          "description": "Persist minimal email context into the private vault and include actionable email priorities in the morning briefing.",
+          "acceptanceCriteria": [
+            "src/integrations/gmail/sync.ts writes minimal thread snapshots to vault/email/threads",
+            "Generated drafts and decisions are written to vault/email/drafts",
+            "Briefing includes email section with top needs_reply and waiting_on_them items",
+            "Path validation prevents traversal and keeps writes inside vault root",
+            "If Gmail is disconnected, briefing still runs and reports email as unavailable",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/integrations/gmail/sync.ts",
+            "src/loops/briefing.ts",
+            "src/skills/email.ts"
+          ],
+          "dependencies": [
+            "TONE-042",
+            "TONE-043",
+            "TONE-013"
+          ],
+          "estimateHours": 3,
+          "tags": [
+            "gmail",
+            "vault",
+            "briefing"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-7",
+      "title": "Email Triage and Reinforcement",
+      "description": "Implement a simple deterministic triage and reinforcement loop for email so Tone can prioritize what needs a reply, remind at useful times, and improve from feedback without overcomplicated ML.",
+      "tickets": [
+        {
+          "id": "TONE-046",
+          "epicId": "EPIC-7",
+          "title": "Deterministic triage labels and priority scoring",
+          "description": "Create a deterministic triage model with fixed labels and transparent scoring for actionable email prioritization.",
+          "acceptanceCriteria": [
+            "Triage labels implemented: needs_reply, waiting_on_them, fyi, no_reply_needed",
+            "Priority score for needs_reply uses deterministic features: sender importance, direct questions, deadline language, thread age, unread count",
+            "Each scored item includes human-readable reasoning for why it was prioritized",
+            "Triage output is consumable by email skill and briefing loop",
+            "Thresholds/weights are configurable (single config file)",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/integrations/gmail/triage.ts",
+            "src/skills/email.ts",
+            "vault-template/config/email-triage.md"
+          ],
+          "dependencies": [
+            "TONE-043"
+          ],
+          "estimateHours": 3,
+          "tags": [
+            "gmail",
+            "triage",
+            "scoring"
+          ]
+        },
+        {
+          "id": "TONE-047",
+          "epicId": "EPIC-7",
+          "title": "Reminder cadence and quick actions",
+          "description": "Implement simple reminder cadence and action shortcuts: morning top list, midday unresolved nudge, evening carry-over recap, with snooze/remind controls.",
+          "acceptanceCriteria": [
+            "Morning briefing includes top 5 needs_reply items",
+            "Midday reminder surfaces unresolved high-priority items",
+            "Evening recap lists carry-over items for next day",
+            "Telegram quick actions supported: draft, send(confirm), snooze 4h, remind tomorrow, mark no-reply, done",
+            "Actions map back to triage state consistently",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/loops/briefing.ts",
+            "src/index.ts",
+            "src/skills/email.ts"
+          ],
+          "dependencies": [
+            "TONE-046",
+            "TONE-045"
+          ],
+          "estimateHours": 3,
+          "tags": [
+            "gmail",
+            "reminders",
+            "workflow"
+          ]
+        },
+        {
+          "id": "TONE-048",
+          "epicId": "EPIC-7",
+          "title": "Reinforcement instrumentation for triage outcomes",
+          "description": "Capture explicit and implicit signals from triage/reply workflows and feed them into nightly analysis.",
+          "acceptanceCriteria": [
+            "Feedback events added for triage outcomes (accepted, edited, sent after reminder, repeated snooze, ignored urgent)",
+            "Outcome events are logged in feedback/interactions JSONL with interaction linkage",
+            "Nightly review aggregates email-specific outcome metrics",
+            "No existing feedback event handling regressions",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/types.ts",
+            "src/feedback.ts",
+            "src/loops/nightly.ts"
+          ],
+          "dependencies": [
+            "TONE-046",
+            "TONE-047",
+            "TONE-014"
+          ],
+          "estimateHours": 2.5,
+          "tags": [
+            "gmail",
+            "feedback",
+            "reinforcement"
+          ]
+        },
+        {
+          "id": "TONE-049",
+          "epicId": "EPIC-7",
+          "title": "Weekly adaptation tuning for triage weights and thresholds",
+          "description": "Use weekly loop outcomes to propose small, bounded updates to triage weights/thresholds, rather than broad behavioral rewrites.",
+          "acceptanceCriteria": [
+            "Weekly review includes triage scorecard section based on email outcomes",
+            "Proposals modify only triage config weights/thresholds within predefined ranges",
+            "Approval flow remains required before applying any triage config mutation",
+            "Rejected proposals remain logged for later analysis",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/loops/weekly.ts",
+            "src/integrations/gmail/triage.ts",
+            "vault-template/config/email-triage.md"
+          ],
+          "dependencies": [
+            "TONE-016",
+            "TONE-048"
+          ],
+          "estimateHours": 2.5,
+          "tags": [
+            "gmail",
+            "adaptation",
+            "triage"
+          ]
+        },
+        {
+          "id": "TONE-050",
+          "epicId": "EPIC-7",
+          "title": "v0.4.0 hardening, runbook, and release checklist",
+          "description": "Finalize reliability hardening, documentation, and release gates for v0.4.0 Gmail integration.",
+          "acceptanceCriteria": [
+            "Runbook documents BYO OAuth setup, common failures, and recovery steps",
+            "Reliability checks cover quota/rate limits, token expiration, and transient API errors",
+            "Smoke test checklist covers connect, triage, draft, send-confirm, reminder loop, and rollback",
+            "Release metadata aligned: package version, changelog, and git tag/release notes",
+            "typecheck passes"
+          ],
+          "files": [
+            "README.md",
+            "docs/Phase 0.4 Gmail Integration Plan.md",
+            "package.json",
+            "CHANGELOG.md"
+          ],
+          "dependencies": [
+            "TONE-044",
+            "TONE-045",
+            "TONE-049"
+          ],
+          "estimateHours": 2,
+          "tags": [
+            "gmail",
+            "release",
+            "operations"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-8",
+      "title": "Google Calendar Context and Planning",
+      "description": "Integrate Google Calendar alongside Gmail so Tone can understand upcoming commitments, support meeting prep, and synthesize day/week planning with tasks and inbox urgency.",
+      "tickets": [
+        {
+          "id": "TONE-051",
+          "epicId": "EPIC-8",
+          "title": "Calendar BYO OAuth onboarding and config surface",
+          "description": "Extend onboarding and config for optional Google Calendar access under the same BYO OAuth model. Calendar remains optional and Tone must run normally when it is disabled.",
+          "acceptanceCriteria": [
+            ".env.example includes Calendar vars: CALENDAR_ENABLED, CALENDAR_SCOPES, CALENDAR_SYNC_WINDOW_DAYS",
+            "src/config.ts validates Calendar vars only when CALENDAR_ENABLED=true",
+            "src/onboard.ts prompts for optional Calendar setup and preserves BYO OAuth guidance",
+            "README documents required Calendar permissions and local token storage constraints",
+            "App starts normally with Calendar disabled",
+            "typecheck passes"
+          ],
+          "files": [
+            ".env.example",
+            "src/config.ts",
+            "src/onboard.ts",
+            "README.md"
+          ],
+          "dependencies": [
+            "TONE-040"
+          ],
+          "estimateHours": 2,
+          "tags": [
+            "calendar",
+            "auth",
+            "onboarding"
+          ]
+        },
+        {
+          "id": "TONE-052",
+          "epicId": "EPIC-8",
+          "title": "Google Calendar API client for events and free-busy windows",
+          "description": "Implement a Calendar client wrapper with typed models for upcoming events, event details, and free/busy availability context.",
+          "acceptanceCriteria": [
+            "src/integrations/calendar/client.ts exports listUpcomingEvents, getEventDetails, getFreeBusy",
+            "Supports date-window queries (today, next 7 days) with timezone normalization",
+            "Maps Google API errors to typed application errors for user-safe messaging",
+            "Implements retry/backoff for transient 429/5xx responses",
+            "Uses least-privilege read-only Calendar scopes for this phase",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/integrations/calendar/client.ts",
+            "src/integrations/calendar/types.ts"
+          ],
+          "dependencies": [
+            "TONE-051"
+          ],
+          "estimateHours": 3,
+          "tags": [
+            "calendar",
+            "integration",
+            "api"
+          ]
+        },
+        {
+          "id": "TONE-053",
+          "epicId": "EPIC-8",
+          "title": "Calendar skill and router wiring for day/week planning",
+          "description": "Add a calendar skill and route planning intents so users can ask for today's plan, weekly plan, and next-meeting prep from Telegram.",
+          "acceptanceCriteria": [
+            "Router recognizes planning intents and maps them to calendar handling intent/entities",
+            "src/skills/calendar.ts supports today agenda, week preview, and next-meeting prep",
+            "Planning output combines event timeline with active tasks and top needs_reply email items",
+            "Calendar skill degrades gracefully when Calendar is disconnected",
+            "Skill is registered in src/skills/index.ts and invoked by the main pipeline",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/router.ts",
+            "src/types.ts",
+            "src/skills/calendar.ts",
+            "src/skills/index.ts",
+            "src/skills/email.ts"
+          ],
+          "dependencies": [
+            "TONE-052",
+            "TONE-047",
+            "TONE-010"
+          ],
+          "estimateHours": 3.5,
+          "tags": [
+            "calendar",
+            "skills",
+            "planning"
+          ]
+        },
+        {
+          "id": "TONE-054",
+          "epicId": "EPIC-8",
+          "title": "Briefing and reminder synthesis across email + calendar + tasks",
+          "description": "Upgrade briefing/reminder outputs so they jointly reason over meetings, inbox urgency, and task carry-over.",
+          "acceptanceCriteria": [
+            "Morning briefing includes key meetings, prep-needed items, and top needs_reply email threads",
+            "Midday reminder includes unresolved high-priority emails and next-meeting prep prompts",
+            "Evening recap highlights carry-over tasks/emails and tomorrow's first commitments",
+            "If Calendar is disconnected, briefing still runs and reports calendar as unavailable",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/loops/briefing.ts",
+            "src/skills/calendar.ts",
+            "src/skills/email.ts",
+            "src/utils/telegram.ts"
+          ],
+          "dependencies": [
+            "TONE-053",
+            "TONE-045",
+            "TONE-013"
+          ],
+          "estimateHours": 3,
+          "tags": [
+            "calendar",
+            "briefing",
+            "workflow"
+          ]
+        },
+        {
+          "id": "TONE-055",
+          "epicId": "EPIC-8",
+          "title": "Planning feedback instrumentation and weekly tuning hooks",
+          "description": "Capture planning outcome signals and feed them into nightly/weekly loops so scheduling suggestions improve with approval-gated adaptation.",
+          "acceptanceCriteria": [
+            "Feedback events added for planning outcomes (plan_followed, prep_completed, prep_missed, calendar_conflict_detected)",
+            "Outcome events are logged in feedback/interactions JSONL with interaction linkage",
+            "Nightly review aggregates calendar-planning outcome metrics",
+            "Weekly review can propose bounded planning heuristic updates with approval flow preserved",
+            "No existing feedback event handling regressions",
+            "typecheck passes"
+          ],
+          "files": [
+            "src/types.ts",
+            "src/feedback.ts",
+            "src/loops/nightly.ts",
+            "src/loops/weekly.ts",
+            "vault-template/config/planning-preferences.md"
+          ],
+          "dependencies": [
+            "TONE-054",
+            "TONE-048",
+            "TONE-016"
+          ],
+          "estimateHours": 3,
+          "tags": [
+            "calendar",
+            "feedback",
+            "adaptation"
+          ]
         }
       ]
     }

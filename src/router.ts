@@ -17,6 +17,8 @@ const ROUTER_INTENTS: InteractionIntent[] = [
   'capture',
   'task',
   'draft',
+  'email',
+  'calendar',
   'chat',
   'rollback',
   'introspection',
@@ -202,6 +204,66 @@ function heuristicIntent(message: string): RouterResult {
     };
   }
 
+  if (
+    /\b(calendar|agenda|schedule|meeting|meetings|what'?s on|what do i have)\b/.test(lowered) &&
+    !/\b(email|gmail|inbox)\b/.test(lowered)
+  ) {
+    if (/\b(week|this week|next week|weekly|upcoming week)\b/.test(lowered)) {
+      entities.action = 'week';
+    } else if (/\b(meeting prep|prepare for|prep for|brief me on)\b/.test(lowered)) {
+      entities.action = 'meeting_prep';
+      const eventMatch = message.match(/(?:event|meeting)\s*(?:id|ref)?\s*[:#]?\s*([a-zA-Z0-9_-]{8,})/i);
+      if (eventMatch?.[1]) {
+        entities.eventId = eventMatch[1].trim();
+      }
+    } else {
+      entities.action = 'today';
+    }
+
+    return {
+      intent: 'calendar',
+      confidence: 0.82,
+      extractedEntities: entities,
+    };
+  }
+
+  if (
+    /\b(gmail|email|inbox|mailbox|thread)\b/.test(lowered) ||
+    (/\b(draft|compose|reply)\b/.test(lowered) && /\b(email|gmail)\b/.test(lowered))
+  ) {
+    if (/\b(connect|link|authorize|auth)\s+gmail\b/.test(lowered)) {
+      entities.action = 'connect';
+    } else if (/\b(gmail\s+code|oauth\s+code|authorization\s+code)\b/.test(lowered)) {
+      entities.action = 'auth_code';
+      const codeMatch = message.match(/(?:gmail\s+code|oauth\s+code|code)\s*[:=]?\s*([^\s]+)/i);
+      if (codeMatch?.[1]) {
+        entities.code = codeMatch[1].trim();
+      }
+    } else if (/\b(send)\b/.test(lowered) && /\b(draft|email|reply)\b/.test(lowered)) {
+      entities.action = 'send';
+      const draftRefMatch = message.match(/draft(?:\s+ref)?\s*[:#]?\s*([a-zA-Z0-9_-]{6,})/i);
+      if (draftRefMatch?.[1]) {
+        entities.draftRef = draftRefMatch[1].trim();
+      }
+    } else if (/\b(draft|compose|reply)\b/.test(lowered)) {
+      entities.action = 'draft';
+      const threadMatch = message.match(/thread\s*[:#]?\s*([a-zA-Z0-9_-]{8,})/i);
+      if (threadMatch?.[1]) {
+        entities.threadId = threadMatch[1].trim();
+      }
+    } else if (/\b(inbox|triage|summary|mailbox)\b/.test(lowered)) {
+      entities.action = 'inbox';
+    } else {
+      entities.action = 'status';
+    }
+
+    return {
+      intent: 'email',
+      confidence: 0.84,
+      extractedEntities: entities,
+    };
+  }
+
   if (/\b(add task|complete task|list tasks|someday|task)\b/.test(lowered)) {
     if (/\b(list tasks|show tasks|what.*tasks)\b/.test(lowered)) {
       entities.action = 'list';
@@ -264,7 +326,7 @@ function buildRoutingPrompt(message: string, skillDefinitions: SkillDefinition[]
   return [
     'You are an intent router for a Telegram personal assistant.',
     'Classify the user message into one intent from this exact set:',
-    'capture, task, draft, chat, rollback, introspection.',
+    'capture, task, draft, email, calendar, chat, rollback, introspection.',
     'Use skill trigger hints when relevant.',
     'Return strict JSON only with keys: intent, confidence, extractedEntities.',
     'Confidence must be a number between 0 and 1.',

@@ -16,6 +16,13 @@ interface OnboardingAnswers {
   telegramBotToken: string;
   telegramDefaultChatId: string;
   openRouterApiKey: string;
+  gmailEnabled: boolean;
+  gmailClientId: string;
+  gmailClientSecret: string;
+  gmailRedirectUri: string;
+  gmailTokenPath: string;
+  calendarEnabled: boolean;
+  calendarSyncWindowDays: number;
   vaultPath: string;
   timezone: string;
   transcriptionProvider: TranscriptionProvider;
@@ -62,6 +69,13 @@ function formatEnvFile(entries: Record<string, string>): string {
     'TELEGRAM_BOT_TOKEN',
     'TELEGRAM_DEFAULT_CHAT_ID',
     'OPENROUTER_API_KEY',
+    'GMAIL_ENABLED',
+    'GMAIL_CLIENT_ID',
+    'GMAIL_CLIENT_SECRET',
+    'GMAIL_REDIRECT_URI',
+    'GMAIL_TOKEN_PATH',
+    'CALENDAR_ENABLED',
+    'CALENDAR_SYNC_WINDOW_DAYS',
     'DEEPGRAM_API_KEY',
     'VAULT_PATH',
     'TONE_TIMEZONE',
@@ -149,6 +163,23 @@ function normalizeProvider(raw: string): TranscriptionProvider | null {
   return null;
 }
 
+function parseBooleanInput(raw: string): boolean | null {
+  const normalized = raw.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y') {
+    return true;
+  }
+
+  if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'n') {
+    return false;
+  }
+
+  return null;
+}
+
 async function promptValue(
   rl: Interface,
   prompt: string,
@@ -183,6 +214,24 @@ async function promptRequired(
     }
 
     return value;
+  }
+}
+
+async function promptBoolean(rl: Interface, prompt: string, defaultValue: boolean): Promise<boolean> {
+  const hint = defaultValue ? 'Y/n' : 'y/N';
+  while (true) {
+    const answer = (await rl.question(`${prompt} [${hint}]: `)).trim();
+    if (answer.length === 0) {
+      return defaultValue;
+    }
+
+    const parsed = parseBooleanInput(answer);
+    if (parsed === null) {
+      console.log('Enter yes or no.');
+      continue;
+    }
+
+    return parsed;
   }
 }
 
@@ -307,6 +356,7 @@ export async function onboard(): Promise<void> {
     console.log('Tone onboarding');
     console.log('Enter values now. Press Enter to accept defaults.');
     console.log('Get Telegram token from @BotFather and OpenRouter key at https://openrouter.ai/keys');
+    console.log('Gmail is optional and BYO OAuth only (each user supplies their own Google OAuth app).');
     console.log('');
 
     const telegramBotToken = await promptRequired(
@@ -324,6 +374,58 @@ export async function onboard(): Promise<void> {
       'OpenRouter API key',
       existingEnv.OPENROUTER_API_KEY ?? '',
     );
+    const existingGmailEnabled = parseBooleanInput(existingEnv.GMAIL_ENABLED ?? '') ?? false;
+    const gmailEnabled = await promptBoolean(
+      rl,
+      'Enable Gmail integration (BYO OAuth app per user)',
+      existingGmailEnabled,
+    );
+
+    let gmailClientId = existingEnv.GMAIL_CLIENT_ID ?? '';
+    let gmailClientSecret = existingEnv.GMAIL_CLIENT_SECRET ?? '';
+    let gmailRedirectUri = existingEnv.GMAIL_REDIRECT_URI ?? '';
+    let gmailTokenPath = existingEnv.GMAIL_TOKEN_PATH ?? path.join(toneHomePath, 'gmail-token.json');
+
+    if (gmailEnabled) {
+      gmailClientId = await promptRequired(rl, 'Gmail OAuth client ID', gmailClientId);
+      gmailClientSecret = await promptRequired(rl, 'Gmail OAuth client secret', gmailClientSecret);
+      gmailRedirectUri = await promptRequired(
+        rl,
+        'Gmail OAuth redirect URI',
+        gmailRedirectUri || 'http://localhost:8085/oauth2/callback',
+      );
+      const rawTokenPath = await promptRequired(rl, 'Local Gmail token path', gmailTokenPath);
+      gmailTokenPath = path.resolve(rawTokenPath);
+    } else {
+      gmailClientId = '';
+      gmailClientSecret = '';
+      gmailRedirectUri = '';
+      gmailTokenPath = '';
+    }
+
+    const existingCalendarEnabled = parseBooleanInput(existingEnv.CALENDAR_ENABLED ?? '') ?? false;
+    const calendarEnabled = await promptBoolean(
+      rl,
+      'Enable Google Calendar integration (read-only, reuses Gmail OAuth)',
+      existingCalendarEnabled,
+    );
+
+    let calendarSyncWindowDays = 7;
+    if (calendarEnabled) {
+      const rawSyncWindow = await promptValue(
+        rl,
+        'Calendar sync window in days (1-30)',
+        existingEnv.CALENDAR_SYNC_WINDOW_DAYS ?? '7',
+      );
+      const parsed = Number(rawSyncWindow);
+      if (!Number.isFinite(parsed) || parsed < 1 || parsed > 30) {
+        console.log('Invalid sync window, using default of 7 days.');
+        calendarSyncWindowDays = 7;
+      } else {
+        calendarSyncWindowDays = parsed;
+      }
+    }
+
     const rawVaultPath = await promptRequired(rl, 'Vault path', existingEnv.VAULT_PATH ?? vaultFallback);
     const vaultPath = path.resolve(rawVaultPath);
     const timezone = await promptRequired(
@@ -366,6 +468,13 @@ export async function onboard(): Promise<void> {
       telegramBotToken,
       telegramDefaultChatId,
       openRouterApiKey,
+      gmailEnabled,
+      gmailClientId,
+      gmailClientSecret,
+      gmailRedirectUri,
+      gmailTokenPath,
+      calendarEnabled,
+      calendarSyncWindowDays,
       vaultPath,
       timezone,
       transcriptionProvider: normalizedProvider,
@@ -379,6 +488,13 @@ export async function onboard(): Promise<void> {
       TELEGRAM_BOT_TOKEN: answers.telegramBotToken,
       TELEGRAM_DEFAULT_CHAT_ID: answers.telegramDefaultChatId,
       OPENROUTER_API_KEY: answers.openRouterApiKey,
+      GMAIL_ENABLED: answers.gmailEnabled ? 'true' : 'false',
+      GMAIL_CLIENT_ID: answers.gmailClientId,
+      GMAIL_CLIENT_SECRET: answers.gmailClientSecret,
+      GMAIL_REDIRECT_URI: answers.gmailRedirectUri,
+      GMAIL_TOKEN_PATH: answers.gmailTokenPath,
+      CALENDAR_ENABLED: answers.calendarEnabled ? 'true' : 'false',
+      CALENDAR_SYNC_WINDOW_DAYS: String(answers.calendarSyncWindowDays),
       DEEPGRAM_API_KEY: answers.deepgramApiKey,
       VAULT_PATH: answers.vaultPath,
       TONE_TIMEZONE: answers.timezone,
