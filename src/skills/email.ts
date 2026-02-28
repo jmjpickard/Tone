@@ -96,19 +96,58 @@ function detectAction(input: SkillExecutionInput): EmailAction {
     return 'mark_done';
   }
 
+  // Detect pasted OAuth callback URLs or bare Google auth codes
+  if (/oauth2\/callback/i.test(input.text) && /[?&]code=/i.test(input.text)) {
+    return 'auth_code';
+  }
+
+  for (const token of input.text.split(/\s+/)) {
+    if (looksLikeGoogleAuthCode(token)) return 'auth_code';
+  }
+
   return 'status';
+}
+
+function extractCodeFromCallbackUrl(text: string): string {
+  const urlMatch = text.match(/(https?:\/\/[^\s]+oauth2\/callback[^\s]*)/i);
+  if (!urlMatch?.[1]) return '';
+
+  try {
+    const url = new URL(urlMatch[1]);
+    return url.searchParams.get('code')?.trim() ?? '';
+  } catch {
+    const codeParam = urlMatch[1].match(/[?&]code=([^&\s]+)/);
+    return codeParam?.[1] ? decodeURIComponent(codeParam[1]).trim() : '';
+  }
+}
+
+function looksLikeGoogleAuthCode(value: string): boolean {
+  return /^4\/0A[a-zA-Z0-9_-]{20,}/.test(value.trim());
 }
 
 function extractAuthCode(input: SkillExecutionInput): string {
   const entityCode = typeof input.entities.code === 'string' ? input.entities.code.trim() : '';
-  if (entityCode) {
+  if (entityCode && looksLikeGoogleAuthCode(entityCode)) {
     return entityCode;
   }
 
+  // Try extracting code from a pasted callback URL first
+  const urlCode = extractCodeFromCallbackUrl(input.text);
+  if (urlCode) return urlCode;
+
+  // Match "gmail code <code>" / "oauth code <code>" patterns
   const inlineCodeMatch = input.text.match(/(?:gmail\s+code|oauth\s+code|code)\s*[:=]?\s*([^\s]+)/i);
-  if (inlineCodeMatch?.[1]) {
+  if (inlineCodeMatch?.[1] && looksLikeGoogleAuthCode(inlineCodeMatch[1])) {
     return inlineCodeMatch[1].trim();
   }
+
+  // Try bare auth code (the whole message or a token in it)
+  for (const token of input.text.split(/\s+/)) {
+    if (looksLikeGoogleAuthCode(token)) return token.trim();
+  }
+
+  // Fall back to entity code even if it doesn't match the Google pattern
+  if (entityCode) return entityCode;
 
   return '';
 }
@@ -362,27 +401,11 @@ async function handleStatusAction(): Promise<SkillResult> {
   }
 
   if (status.state === 'disconnected') {
-    try {
-      const auth = startAuth();
-      return {
-        status: 'success',
-        intent: 'email',
-        response: [
-          'Gmail is disconnected.',
-          '',
-          'Connect it with BYO OAuth:',
-          `1) Open: ${auth.url}`,
-          '2) Grant access',
-          '3) Send me: gmail code <authorization_code>',
-        ].join('\n'),
-      };
-    } catch {
-      return {
-        status: 'success',
-        intent: 'email',
-        response: status.message,
-      };
-    }
+    return {
+      status: 'success',
+      intent: 'email',
+      response: 'Gmail is not connected yet. Connect your account first.\n\nUse /connect to start the authorization flow.',
+    };
   }
 
   return {

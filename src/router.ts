@@ -227,6 +227,33 @@ function heuristicIntent(message: string): RouterResult {
     };
   }
 
+  // Detect pasted OAuth callback URLs or bare Google auth codes
+  if (/oauth2\/callback/i.test(message) && /[?&]code=/i.test(message)) {
+    entities.action = 'auth_code';
+    const codeParam = message.match(/[?&]code=([^&\s]+)/);
+    if (codeParam?.[1]) {
+      entities.code = decodeURIComponent(codeParam[1]).trim();
+    }
+
+    return {
+      intent: 'email',
+      confidence: 0.95,
+      extractedEntities: entities,
+    };
+  }
+
+  const googleCodeMatch = message.match(/\b(4\/0A[a-zA-Z0-9_-]{20,})\b/);
+  if (googleCodeMatch?.[1]) {
+    entities.action = 'auth_code';
+    entities.code = googleCodeMatch[1];
+
+    return {
+      intent: 'email',
+      confidence: 0.92,
+      extractedEntities: entities,
+    };
+  }
+
   if (
     /\b(gmail|email|inbox|mailbox|thread)\b/.test(lowered) ||
     (/\b(draft|compose|reply)\b/.test(lowered) && /\b(email|gmail)\b/.test(lowered))

@@ -190,7 +190,7 @@ export const startCallbackServer = (options: CallbackServerOptions): Promise<Cal
       settle(() =>
         reject(
           new Error(
-            'Google authorization timed out after 5 minutes. Tap /connect and try again when ready.',
+            'Google authorization timed out after 5 minutes. Tap /connect and try again, or paste the callback URL from your browser directly here.',
           ),
         ),
       );

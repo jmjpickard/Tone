@@ -1,100 +1,45 @@
-# Tone - Planning Scratchpad
+# Google OAuth Flow Fix
 
-## Current Work: Finish EPIC-7, Start EPIC-8
+## Problems Identified
 
-### Status Assessment
+### Problem 1: Callback server doesn't work on mobile
+`runGoogleOAuthFlow()` starts a callback server on `localhost:8085`. When the user is on mobile Telegram, the browser redirect to `localhost:8085` goes nowhere — the callback server is on the bot's host machine, not the phone. The flow times out after 5 minutes.
 
-**EPIC-7 (Email Triage & Reinforcement):**
-- TONE-046 ✅ Deterministic triage + scoring — complete
-- TONE-047 ✅ Reminder cadence + quick actions — complete
-- TONE-048 ✅ Reinforcement instrumentation — complete
-- TONE-049 ✅ Weekly adaptation tuning — complete
-- TONE-050 ⏭️ Hardening/release — deferred (docs/runbook)
+### Problem 2: After timeout, asking about Gmail shows a new BYO OAuth URL
+When disconnected, `handleStatusAction` calls `startAuth()` and shows a fresh OAuth URL. This creates a second, independent auth flow — confusing when the user already has a valid code from a previous attempt.
 
-**EPIC-8 (Google Calendar):**
-- TONE-051 ✅ Calendar onboarding + config — complete (CalendarConfig, onboard prompts, 'calendar' intent)
-- TONE-052 ✅ Calendar API client — complete (listUpcomingEvents, getEventDetails, getFreeBusy)
-- TONE-053 ✅ Calendar skill + routing — complete (today/week/meeting_prep actions, router heuristics)
-- TONE-054 ❌ Briefing synthesis — not started (integrate calendar into morning briefing)
-- TONE-055 ❌ Planning feedback — not started
+### Problem 3: `extractAuthCode` can't parse callback URLs
+When the user pastes `http://localhost:8085/oauth2/callback?state=...&code=4/0Afrlep...&scope=...`, the regex `([^\s]+)` grabs everything from "code" onwards including `&scope=...`. It also doesn't handle URL query parameters properly.
 
-### Implementation Plan
+### Problem 4: Router doesn't recognize pasted callback URLs as auth codes
+The router checks for `gmail code`, `oauth code`, `authorization code` keywords. A bare callback URL or a code like `4/0Afrlep...` doesn't match.
 
-#### Phase A: TONE-047 — Midday/Evening Reminders + Quick Actions
+### Problem 5: `detectAction` in email.ts doesn't catch callback URLs
+Same issue as the router — if the message contains a callback URL or bare auth code, it falls through to `status`.
 
-**Files to modify:**
-- `src/loops/briefing.ts` — add `scheduleMidday()` and `scheduleEvening()` cron jobs
-- `src/skills/email.ts` — add snooze_4h, remind_tomorrow, mark_no_reply, done quick actions
-- `src/index.ts` — wire midday/evening crons, add email quick action callback handlers
-- `src/integrations/gmail/sync.ts` — update triage thread state for snooze/done
+## Fixes
 
-**Approach:**
-- Midday cron (12:30): surfaces unresolved high-priority items from latest triage snapshot
-- Evening cron (20:00): lists carry-over items for next day
-- Quick actions via inline keyboard on triage items
-- Snooze updates `snoozedUntil` in triage state map
-- Done/no-reply updates `status` in triage state map
+### Fix 1: `extractAuthCode` — parse callback URLs + bare codes (email.ts)
+- Detect `oauth2/callback` URLs → parse `code` query param with URL API
+- Detect bare Google auth codes (pattern: `4/0A...`)
+- Extract code between `&` delimiters properly
 
-#### Phase B: TONE-048 — Reinforcement Instrumentation
+### Fix 2: Router heuristic — recognize callback URLs and auth codes (router.ts)
+- Add pattern for `oauth2/callback` URLs → route as email/auth_code
+- Add pattern for bare `4/0A` codes → route as email/auth_code
 
-**Files to modify:**
-- `src/types.ts` — add triage outcome feedback event types
-- `src/feedback.ts` — add `logTriageOutcome()` function
-- `src/loops/nightly.ts` — aggregate email-specific metrics in nightly review
+### Fix 3: `detectAction` — catch callback URLs and bare codes (email.ts)
+- Add fallback detection for callback URLs and bare auth codes
 
-**New FeedbackEventTypes:**
-- `email_triage_accepted` — user acted on triage suggestion
-- `email_snooze` — user snoozed an item
-- `email_marked_done` — user marked item done
-- `email_marked_no_reply` — user marked no-reply
-- `email_ignored_urgent` — high-priority item went unacted for >24h
+### Fix 4: `runGoogleOAuthFlow` — show manual fallback instructions (index.ts)
+- In the waiting message, mention that the user can paste the code or URL back if the auto-redirect doesn't work
+- In the timeout message, include clearer instructions
 
-#### Phase C: TONE-049 — Weekly Triage Tuning
+### Fix 5: `handleStatusAction` — don't generate new auth URLs inline (email.ts)
+- When disconnected, just say "not connected" with instructions to use `/connect`
+- Don't call `startAuth()` and show a new BYO URL mid-conversation
 
-**Files to modify:**
-- `src/loops/weekly.ts` — add triage scorecard section, propose bounded weight changes
-- `src/integrations/gmail/triage.ts` — expose weight range constants for weekly loop
-
-**Approach:**
-- Weekly review reads email action JSONL for the week
-- Calculates: accuracy rate, false-positive rate, snooze frequency
-- Proposes ±10% weight changes within predefined bounds
-- Changes go through existing approval flow
-
-#### Phase D: TONE-051 — Calendar Onboarding
-
-**Files to modify:**
-- `.env.example` — add CALENDAR_ENABLED, CALENDAR_SCOPES, CALENDAR_SYNC_WINDOW_DAYS
-- `src/config.ts` — add CalendarConfig type, buildCalendarConfig(), validate
-- `src/onboard.ts` — add calendar prompts after Gmail section
-- `src/types.ts` — add 'calendar' to InteractionIntent
-
-#### Phase E: TONE-052 — Calendar API Client
-
-**New files:**
-- `src/integrations/calendar/types.ts` — CalendarEvent, FreeBusyWindow, CalendarError types
-- `src/integrations/calendar/client.ts` — listUpcomingEvents, getEventDetails, getFreeBusy
-
-**Approach:**
-- Reuse Gmail's BYO OAuth tokens (same Google project, add calendar scope)
-- Use googleapis or raw REST calls
-- Typed error mapping matching Gmail pattern
-- Retry/backoff for 429/5xx
-
-#### Phase F: TONE-053 — Calendar Skill + Routing
-
-**New files:**
-- `src/skills/calendar.ts` — today agenda, week preview, meeting prep
-
-**Files to modify:**
-- `src/router.ts` — add calendar/planning heuristics
-- `src/skills/index.ts` — register calendar skill
-- `src/types.ts` — add 'calendar' intent
-
-### Key Design Decisions
-
-1. **Calendar reuses Gmail OAuth** — same Google Cloud project, just add calendar scope. No separate token flow.
-2. **Midday/evening reminders** — lightweight crons that read existing triage snapshot, no new Gmail API calls.
-3. **Quick actions** — inline keyboard buttons on triage messages, callbacks in index.ts.
-4. **Weekly triage tuning** — bounded ±10% weight changes, never outside predefined min/max ranges already in triage.ts.
-5. **Calendar is read-only** — no event creation/deletion in v0.4.x.
+## Files to Change
+1. `src/skills/email.ts` — extractAuthCode, detectAction, handleStatusAction
+2. `src/router.ts` — heuristicIntent
+3. `src/index.ts` — runGoogleOAuthFlow messages

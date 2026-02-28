@@ -310,6 +310,8 @@ const runGoogleOAuthFlow = async (ctx: Context): Promise<void> => {
       `⏳ Waiting for Google authorization (up to 5 minutes)...`,
       '',
       'Tap below, sign in with Google, then return here. I will confirm once connected.',
+      '',
+      'On mobile? After granting access, copy the URL from your browser and paste it here.',
     ].join('\n'),
     {
       reply_markup: Markup.inlineKeyboard([
